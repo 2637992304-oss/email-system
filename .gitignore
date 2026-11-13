@@ -20,6 +20,8 @@ uploads/
 target/
 node_modules/
 .npm-cache/
+__pycache__/
+*.pyc
 dist/
 .idea/
 .vscode/

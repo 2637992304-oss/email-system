@@ -2,6 +2,7 @@ services:
   db:
     image: mysql:8.0
     environment:
+      TZ: ${TZ:-Asia/Shanghai}
       MYSQL_DATABASE: mail_system
       MYSQL_USER: ${DB_USERNAME:-mail_app}
       MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
@@ -15,8 +16,12 @@ services:
       timeout: 5s
       retries: 40
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        MAVEN_MIRROR: ${MAVEN_MIRROR:-https://repo.maven.apache.org/maven2}
     environment:
+      TZ: ${TZ:-Asia/Shanghai}
       DB_URL: jdbc:mysql://db:3306/mail_system?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
       DB_USERNAME: ${DB_USERNAME:-mail_app}
       DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}

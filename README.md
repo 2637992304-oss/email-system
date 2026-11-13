@@ -26,6 +26,8 @@
 | `LLM_ENABLED` | 默认 false；配置 Key 后改为 true |
 | `LLM_API_KEY` | 运行者自行申请的全新 Key，禁止复用旧仓库已公开的 Key |
 | `LLM_BASE_URL` / `LLM_API_PATH` / `LLM_MODEL` | OpenAI 兼容供应商的地址、路径、模型 |
+| `TZ` | 容器时区，默认 Asia/Shanghai |
+| `MAVEN_MIRROR` | Docker 构建依赖仓库，默认 Maven Central；网络受限时可自行填写可访问的 Maven 镜像源 |
 
 例如执行 `python -c "import secrets; print(secrets.token_hex(32))"` 生成一个随机值。为每个敏感配置分别生成，勿在日志或截图中公开。
 配置文件使用不带引号的 `KEY=value`；建议密码/密钥使用随机十六进制字符串，避免 dotenv 与 Java properties 的转义差异。进程环境变量优先于 `.env`。
@@ -38,6 +40,8 @@
 docker compose up -d --build
 docker compose ps
 ```
+
+如果容器构建访问 Maven Central 返回 403，可在 `.env` 设置 `MAVEN_MIRROR=https://maven.aliyun.com/repository/public` 后重新构建；它只影响构建依赖下载，不改变运行配置。Docker Hub 无法连接时需先解决镜像下载网络，或预先从可信镜像源获取同版本基础镜像。
 
 访问 http://localhost:5173 ，注册两个账号即可互发邮件。数据库第一次启动会自动执行 `database/schema.sql`。
 数据库和附件保存在独立的命名卷中；普通 `docker compose down` 保留数据。不要使用 `down -v`，除非明确要清空数据库和附件。
@@ -100,6 +104,16 @@ npm run build
 python scripts/smoke-test.py --base-url http://localhost:8080
 python scripts/check-secrets.py
 ```
+
+容器部署额外验收（仅对专用测试环境执行）：
+
+```sh
+python scripts/deployment-test.py --phase setup --base-url http://localhost:5173
+docker compose up -d --force-recreate
+python scripts/deployment-test.py --phase verify --base-url http://localhost:5173
+```
+
+该脚本验证网页路由、实时 SSE 通知和容器重建后的邮件/附件持久化，临时登录令牌保存在已忽略的 `data/deployment-state.json`，请勿公开或提交该文件。重建时不能删除数据卷。
 
 后端测试使用随机测试签名密钥；集成验收脚本会注册虚构账号并留下测试邮件，应对专用数据库运行。
 生产前端构建位于 `frontend/dist`，需使用支持 Vue 路由回退、`/api` 转发和 SSE 的服务器，示例见 `frontend/nginx.conf`；直接打开 index.html 不会启动系统。
