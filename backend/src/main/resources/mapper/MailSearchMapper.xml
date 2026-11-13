@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.shixun.mail.mapper.MailSearchMapper">
+
+    <resultMap id="MailResultMap" type="com.shixun.mail.entity.Mail">
+        <id column="mail_id" property="mailId"/>
+        <result column="sender_id" property="senderId"/>
+        <result column="subject" property="subject"/>
+        <result column="content" property="content"/>
+        <result column="send_time" property="sendTime"/>
+        <result column="has_attachment" property="hasAttachment"/>
+        <result column="is_spam" property="spam"/>
+        <result column="priority" property="priority"/>
+        <result column="mail_status" property="mailStatus"/>
+        <result column="sender_deleted" property="senderDeleted"/>
+    </resultMap>
+
+    <sql id="AccessibleMailWhere">
+        m.mail_status = 1
+        AND (
+            (m.sender_id = #{userId} AND m.sender_deleted = FALSE)
+            OR EXISTS (
+                SELECT 1
+                FROM mail_receiver mr
+                WHERE mr.mail_id = m.mail_id
+                  AND mr.receiver_id = #{userId}
+                  AND mr.is_deleted = FALSE
+            )
+        )
+    </sql>
+
+    <select id="search" resultMap="MailResultMap">
+        SELECT m.mail_id, m.sender_id, m.subject, m.content, m.send_time,
+               m.has_attachment, m.is_spam, m.priority, m.mail_status, m.sender_deleted
+        FROM mail m
+        WHERE <include refid="AccessibleMailWhere"/>
+          AND (
+              #{keyword} = ''
+              OR m.subject LIKE CONCAT('%', #{keyword}, '%')
+              OR m.content LIKE CONCAT('%', #{keyword}, '%')
+          )
+        ORDER BY m.send_time DESC
+    </select>
+
+    <select id="filter" resultMap="MailResultMap">
+        SELECT DISTINCT m.mail_id, m.sender_id, m.subject, m.content, m.send_time,
+                        m.has_attachment, m.is_spam, m.priority, m.mail_status, m.sender_deleted
+        FROM mail m
+        LEFT JOIN mail_receiver mr
+               ON mr.mail_id = m.mail_id
+              AND mr.receiver_id = #{userId}
+              AND mr.is_deleted = FALSE
+        WHERE <include refid="AccessibleMailWhere"/>
+        <if test="isRead != null">
+          AND mr.is_read = #{isRead}
+        </if>
+        <if test="hasAttachment != null">
+          AND m.has_attachment = #{hasAttachment}
+        </if>
+        <if test="startTime != null">
+          AND m.send_time &gt;= #{startTime}
+        </if>
+        <if test="endTime != null">
+          AND m.send_time &lt;= #{endTime}
+        </if>
+        ORDER BY m.send_time DESC
+    </select>
+</mapper>

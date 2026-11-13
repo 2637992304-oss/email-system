@@ -1,0 +1,43 @@
+spring:
+  config:
+    import: optional:file:../.env[.properties],optional:file:.env[.properties]
+  application:
+    name: mail-system
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/mail_system?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+    username: ${DB_USERNAME:mail_app}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      initialization-fail-timeout: 10000
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 12MB
+server:
+  port: ${SERVER_PORT:8080}
+mybatis-plus:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.shixun.user.entity
+  global-config:
+    db-config:
+      id-type: auto
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+mail:
+  attachment:
+    root-dir: ${ATTACHMENT_ROOT:data/uploads/attachments}
+  security:
+    jwt-secret: ${JWT_SECRET}
+    token-expire-minutes: ${JWT_EXPIRE_MINUTES:120}
+    white-list:
+      - /api/auth/login
+      - /api/auth/register
+      - /api/health
+llm:
+  enabled: ${LLM_ENABLED:false}
+  api-key: ${LLM_API_KEY:}
+  base-url: ${LLM_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
+  api-path: ${LLM_API_PATH:/chat/completions}
+  model: ${LLM_MODEL:glm-4-flash}

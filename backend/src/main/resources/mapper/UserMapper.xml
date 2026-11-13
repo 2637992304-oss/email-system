@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.shixun.user.mapper.UserMapper">
+
+    <resultMap id="UserResultMap" type="com.shixun.user.entity.User">
+        <id column="user_id" property="userId"/>
+        <result column="email" property="email"/>
+        <result column="username" property="username"/>
+        <result column="password" property="password"/>
+        <result column="register_time" property="registerTime"/>
+        <result column="status" property="status"/>
+    </resultMap>
+
+    <select id="findById" parameterType="long" resultMap="UserResultMap">
+        SELECT
+            user_id,
+            email,
+            username,
+            password,
+            register_time,
+            status
+        FROM `user`
+        WHERE user_id = #{userId}
+    </select>
+
+    <select id="findByEmail" parameterType="string" resultMap="UserResultMap">
+        SELECT
+            user_id,
+            email,
+            username,
+            password,
+            register_time,
+            status
+        FROM `user`
+        WHERE email = #{email}
+    </select>
+
+    <insert id="insert" parameterType="com.shixun.user.entity.User" useGeneratedKeys="true" keyProperty="userId">
+        INSERT INTO `user` (
+            email,
+            username,
+            password,
+            register_time,
+            status
+        ) VALUES (
+            #{email},
+            #{username},
+            #{password},
+            #{registerTime},
+            #{status}
+        )
+    </insert>
+</mapper>

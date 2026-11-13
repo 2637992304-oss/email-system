@@ -1,0 +1,349 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.shixun.mail.mapper.MailMapper">
+
+    <resultMap id="MailListResultMap" type="com.shixun.mail.vo.MailListVO">
+        <id column="mail_id" property="mailId"/>
+        <result column="sender_id" property="senderId"/>
+        <result column="sender_name" property="senderName"/>
+        <result column="sender_email" property="senderEmail"/>
+        <result column="subject" property="subject"/>
+        <result column="preview" property="preview"/>
+        <result column="is_read" property="read"/>
+        <result column="has_attachment" property="hasAttachment"/>
+        <result column="receive_time" property="receiveTime"/>
+        <result column="send_time" property="sendTime"/>
+        <result column="priority" property="priority"/>
+        <result column="is_spam" property="spamFlag"/>
+    </resultMap>
+
+    <resultMap id="MailDetailResultMap" type="com.shixun.mail.vo.MailDetailVO">
+        <id column="mail_id" property="mailId"/>
+        <result column="sender_id" property="senderId"/>
+        <result column="sender_name" property="senderName"/>
+        <result column="sender_email" property="senderEmail"/>
+        <result column="subject" property="subject"/>
+        <result column="content" property="content"/>
+        <result column="send_time" property="sendTime"/>
+        <result column="is_read" property="read"/>
+        <result column="has_attachment" property="hasAttachment"/>
+        <result column="priority" property="priority"/>
+        <result column="is_spam" property="spamFlag"/>
+        <result column="spam_type" property="spamType"/>
+        <result column="reason" property="spamReason"/>
+    </resultMap>
+
+    <insert id="insertMail"
+            parameterType="com.shixun.mail.entity.Mail"
+            useGeneratedKeys="true"
+            keyProperty="mailId"
+            keyColumn="mail_id">
+        INSERT INTO mail (
+            sender_id,
+            subject,
+            content,
+            send_time,
+            has_attachment,
+            is_spam,
+            priority,
+            mail_status,
+            sender_deleted
+        ) VALUES (
+            #{senderId},
+            #{subject},
+            #{content},
+            NOW(),
+            #{hasAttachment},
+            #{spam},
+            #{priority},
+            #{mailStatus},
+            #{senderDeleted}
+        )
+    </insert>
+
+    <insert id="insertMailReceiver" parameterType="com.shixun.mail.entity.MailReceiver">
+        INSERT INTO mail_receiver (
+            mail_id,
+            receiver_id,
+            receiver_type,
+            is_read,
+            is_deleted,
+            receive_time
+        ) VALUES (
+            #{mailId},
+            #{receiverId},
+            #{receiverType},
+            #{read},
+            #{deleted},
+            NOW()
+        )
+    </insert>
+
+    <select id="selectInboxList" resultMap="MailListResultMap">
+        SELECT
+            m.mail_id,
+            m.sender_id,
+            u.username AS sender_name,
+            u.email AS sender_email,
+            m.subject,
+            CASE
+                WHEN CHAR_LENGTH(IFNULL(m.content, '')) > 50 THEN CONCAT(LEFT(m.content, 50), '...')
+                ELSE m.content
+            END AS preview,
+            mr.is_read,
+            m.has_attachment,
+            mr.receive_time,
+            m.send_time,
+            m.priority,
+            m.is_spam
+        FROM mail_receiver mr
+        JOIN mail m ON mr.mail_id = m.mail_id
+        JOIN `user` u ON m.sender_id = u.user_id
+        WHERE mr.receiver_id = #{userId}
+          AND mr.is_deleted = FALSE
+          AND m.mail_status = 1
+        ORDER BY m.send_time DESC
+    </select>
+
+    <select id="selectSentBaseList" resultMap="MailListResultMap">
+        SELECT
+            m.mail_id,
+            m.sender_id,
+            u.username AS sender_name,
+            u.email AS sender_email,
+            m.subject,
+            CASE
+                WHEN CHAR_LENGTH(IFNULL(m.content, '')) > 50 THEN CONCAT(LEFT(m.content, 50), '...')
+                ELSE m.content
+            END AS preview,
+            m.has_attachment,
+            m.send_time,
+            m.priority,
+            m.is_spam
+        FROM mail m
+        JOIN `user` u ON m.sender_id = u.user_id
+        WHERE m.sender_id = #{userId}
+          AND m.sender_deleted = FALSE
+          AND m.mail_status = 1
+        ORDER BY m.send_time DESC
+    </select>
+
+    <select id="selectTrashBaseList" resultMap="MailListResultMap">
+        SELECT DISTINCT
+            m.mail_id,
+            m.sender_id,
+            u.username AS sender_name,
+            u.email AS sender_email,
+            m.subject,
+            CASE
+                WHEN CHAR_LENGTH(IFNULL(m.content, '')) > 50 THEN CONCAT(LEFT(m.content, 50), '...')
+                ELSE m.content
+            END AS preview,
+            mr.is_read,
+            m.has_attachment,
+            mr.receive_time,
+            m.send_time,
+            m.priority,
+            m.is_spam
+        FROM mail m
+        JOIN `user` u ON m.sender_id = u.user_id
+        LEFT JOIN mail_receiver mr
+               ON mr.mail_id = m.mail_id
+              AND mr.receiver_id = #{userId}
+        WHERE m.mail_status = 1
+          AND (
+              (m.sender_id = #{userId} AND m.sender_deleted = TRUE)
+              OR mr.is_deleted = TRUE
+          )
+        ORDER BY m.send_time DESC
+    </select>
+
+    <select id="selectReceiverNamesByMailId" resultType="java.lang.String">
+        SELECT u.username
+        FROM mail_receiver mr
+        JOIN `user` u ON mr.receiver_id = u.user_id
+        WHERE mr.mail_id = #{mailId}
+          AND mr.receiver_type IN ('TO', 'CC')
+        ORDER BY FIELD(mr.receiver_type, 'TO', 'CC'), u.email
+    </select>
+
+    <select id="selectReceiverEmailsByMailId" resultType="java.lang.String">
+        SELECT u.email
+        FROM mail_receiver mr
+        JOIN `user` u ON mr.receiver_id = u.user_id
+        WHERE mr.mail_id = #{mailId}
+          AND mr.receiver_type IN ('TO', 'CC')
+        ORDER BY FIELD(mr.receiver_type, 'TO', 'CC'), u.email
+    </select>
+
+    <select id="selectMailDetail" resultMap="MailDetailResultMap">
+        SELECT
+            m.mail_id,
+            m.sender_id,
+            u.username AS sender_name,
+            u.email AS sender_email,
+            m.subject,
+            m.content,
+            m.send_time,
+            m.has_attachment,
+            m.priority,
+            m.is_spam,
+            sr.spam_type,
+            sr.reason
+        FROM mail m
+        JOIN `user` u ON m.sender_id = u.user_id
+        LEFT JOIN spam_record sr ON sr.mail_id = m.mail_id
+        WHERE m.mail_id = #{mailId}
+          AND m.mail_status = 1
+    </select>
+
+    <select id="selectToEmailsByMailId" resultType="java.lang.String">
+        SELECT u.email
+        FROM mail_receiver mr
+        JOIN `user` u ON mr.receiver_id = u.user_id
+        WHERE mr.mail_id = #{mailId}
+          AND mr.receiver_type = 'TO'
+        ORDER BY u.email
+    </select>
+
+    <select id="selectCcEmailsByMailId" resultType="java.lang.String">
+        SELECT u.email
+        FROM mail_receiver mr
+        JOIN `user` u ON mr.receiver_id = u.user_id
+        WHERE mr.mail_id = #{mailId}
+          AND mr.receiver_type = 'CC'
+        ORDER BY u.email
+    </select>
+
+    <select id="existsMailAccess" resultType="boolean">
+        SELECT COUNT(1) > 0
+        FROM mail m
+        WHERE m.mail_id = #{mailId}
+          AND m.mail_status = 1
+          AND (
+              m.sender_id = #{userId}
+              OR EXISTS (
+                  SELECT 1
+                  FROM mail_receiver mr
+                  WHERE mr.mail_id = m.mail_id
+                    AND mr.receiver_id = #{userId}
+              )
+          )
+    </select>
+
+    <select id="existsSender" resultType="boolean">
+        SELECT COUNT(1) > 0
+        FROM mail
+        WHERE mail_id = #{mailId}
+          AND sender_id = #{userId}
+          AND sender_deleted = FALSE
+          AND mail_status = 1
+    </select>
+
+    <select id="existsReceiverRecord" resultType="boolean">
+        SELECT COUNT(1) > 0
+        FROM mail_receiver mr
+        JOIN mail m ON mr.mail_id = m.mail_id
+        WHERE mr.mail_id = #{mailId}
+          AND mr.receiver_id = #{userId}
+          AND mr.is_deleted = FALSE
+          AND m.mail_status = 1
+    </select>
+
+    <select id="existsDeletedSender" resultType="boolean">
+        SELECT COUNT(1) > 0
+        FROM mail
+        WHERE mail_id = #{mailId}
+          AND sender_id = #{userId}
+          AND sender_deleted = TRUE
+          AND mail_status = 1
+    </select>
+
+    <select id="existsDeletedSenderAny" resultType="boolean">
+        SELECT COUNT(1) > 0
+        FROM mail
+        WHERE mail_id = #{mailId}
+          AND sender_deleted = TRUE
+          AND mail_status = 1
+    </select>
+
+    <select id="existsDeletedReceiverRecord" resultType="boolean">
+        SELECT COUNT(1) > 0
+        FROM mail_receiver mr
+        JOIN mail m ON mr.mail_id = m.mail_id
+        WHERE mr.mail_id = #{mailId}
+          AND mr.receiver_id = #{userId}
+          AND mr.is_deleted = TRUE
+          AND m.mail_status = 1
+    </select>
+
+    <select id="existsActiveReceiver" resultType="boolean">
+        SELECT COUNT(1) > 0
+        FROM mail_receiver mr
+        JOIN mail m ON mr.mail_id = m.mail_id
+        WHERE mr.mail_id = #{mailId}
+          AND mr.is_deleted = FALSE
+          AND m.mail_status = 1
+    </select>
+
+    <update id="updateReadStatus">
+        UPDATE mail_receiver
+        SET is_read = #{isRead}
+        WHERE mail_id = #{mailId}
+          AND receiver_id = #{userId}
+          AND is_deleted = FALSE
+    </update>
+
+    <update id="updateReceiverDeleted">
+        UPDATE mail_receiver
+        SET is_deleted = TRUE
+        WHERE mail_id = #{mailId}
+          AND receiver_id = #{userId}
+    </update>
+
+    <update id="updateSenderDeleted">
+        UPDATE mail
+        SET sender_deleted = TRUE
+        WHERE mail_id = #{mailId}
+          AND sender_id = #{senderId}
+    </update>
+
+    <update id="restoreReceiverDeleted">
+        UPDATE mail_receiver
+        SET is_deleted = FALSE
+        WHERE mail_id = #{mailId}
+          AND receiver_id = #{userId}
+          AND is_deleted = TRUE
+    </update>
+
+    <update id="restoreSenderDeleted">
+        UPDATE mail
+        SET sender_deleted = FALSE
+        WHERE mail_id = #{mailId}
+          AND sender_id = #{senderId}
+          AND sender_deleted = TRUE
+          AND mail_status = 1
+    </update>
+
+    <delete id="deleteReceiverRecord">
+        DELETE FROM mail_receiver
+        WHERE mail_id = #{mailId}
+          AND receiver_id = #{userId}
+          AND is_deleted = TRUE
+    </delete>
+
+    <update id="updateMailStatus">
+        UPDATE mail
+        SET mail_status = #{mailStatus}
+        WHERE mail_id = #{mailId}
+    </update>
+
+    <!-- 成员6: 更新垃圾邮件标记 -->
+    <update id="updateSpamFlag">
+        UPDATE mail
+        SET is_spam = #{isSpam}
+        WHERE mail_id = #{mailId}
+    </update>
+</mapper>

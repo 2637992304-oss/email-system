@@ -1,0 +1,31 @@
+# Local credentials / runtime data
+.env
+.env.*
+!.env.example
+application-local.y*ml
+application-*-local.y*ml
+*.pem
+*.key
+*.p12
+*.pfx
+mysql-data/
+data/
+uploads/
+*.log
+*.err
+*.pid
+*.dump
+*.sql.gz
+# Build, dependencies, tools, editor state
+target/
+node_modules/
+.npm-cache/
+dist/
+.idea/
+.vscode/
+*.iml
+*.class
+.DS_Store
+Thumbs.db
+.agents/
+.codex/

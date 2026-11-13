@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+BASE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+JAR="$BASE/.mvn/wrapper/maven-wrapper.jar"
+if [ -n "${JAVA_HOME:-}" ]; then JAVA="$JAVA_HOME/bin/java"; else JAVA=java; fi
+if [ ! -s "$JAR" ]; then
+  URL=$(sed -n 's/^wrapperUrl=//p' "$BASE/.mvn/wrapper/maven-wrapper.properties" | tr -d '\r')
+  if command -v curl >/dev/null 2>&1; then curl -fSL "$URL" -o "$JAR";
+  else wget -O "$JAR" "$URL"; fi
+fi
+exec "$JAVA" "-Dmaven.multiModuleProjectDirectory=$BASE" -cp "$JAR" org.apache.maven.wrapper.MavenWrapperMain "$@"

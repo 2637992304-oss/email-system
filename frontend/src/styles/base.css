@@ -1,0 +1,48 @@
+/* Gmail-inspired — clean, productive, precise */
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap");
+
+:root {
+  --c-bg: #f0f4f9;
+  --c-surface: #ffffff;
+  --c-accent: #0b57d0;
+  --c-accent-hover: #0842a0;
+  --c-accent-light: #d3e3fd;
+  --c-accent-subtle: #eaf1fb;
+  --c-text: #202124;
+  --c-text-secondary: #5f6368;
+  --c-text-muted: #80868b;
+  --c-border: #dadce0;
+  --c-border-light: #e8eaed;
+  --c-danger: #b3261e;
+  --c-danger-light: #fce8e6;
+  --c-success: #137333;
+  --c-success-light: #e6f4ea;
+  --c-shadow: rgba(60, 64, 67, 0.1);
+  --c-shadow-md: rgba(60, 64, 67, 0.14);
+  --c-shadow-lg: rgba(60, 64, 67, 0.22);
+
+  --font-body: "DM Sans", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 16px;
+  --r-full: 9999px;
+  --t-fast: 0.15s ease;
+  --t-base: 0.25s ease;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-font-smoothing: antialiased; }
+body { margin: 0; font-family: var(--font-body); color: var(--c-text); background: var(--c-bg); line-height: 1.5; }
+button, input, select, textarea { font-family: inherit; font-size: inherit; }
+button { cursor: pointer; border: 0; background: none; padding: 0; color: inherit; }
+a { color: var(--c-accent); font-weight: 500; text-decoration: none; transition: color var(--t-fast); }
+a:hover { color: var(--c-accent-hover); }
+h1, h2, h3, h4, h5, h6, p { margin-top: 0; }
+input, select, textarea { outline: none; }
+input:focus, select:focus, textarea:focus { border-color: var(--c-accent); box-shadow: 0 0 0 3px var(--c-accent-light); }
+::selection { background: var(--c-accent-light); color: var(--c-accent); }

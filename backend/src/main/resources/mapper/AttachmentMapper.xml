@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.shixun.attachment.mapper.AttachmentMapper">
+
+    <resultMap id="AttachmentResultMap" type="com.shixun.attachment.entity.Attachment">
+        <id column="attachment_id" property="attachmentId"/>
+        <result column="mail_id" property="mailId"/>
+        <result column="uploader_id" property="uploaderId"/>
+        <result column="file_name" property="fileName"/>
+        <result column="file_path" property="filePath"/>
+        <result column="file_size" property="fileSize"/>
+        <result column="file_type" property="fileType"/>
+        <result column="upload_time" property="uploadTime"/>
+    </resultMap>
+
+    <resultMap id="AttachmentVOResultMap" type="com.shixun.mail.vo.AttachmentVO">
+        <id column="attachment_id" property="attachmentId"/>
+        <result column="file_name" property="fileName"/>
+        <result column="file_size" property="fileSize"/>
+        <result column="file_type" property="fileType"/>
+        <result column="download_url" property="downloadUrl"/>
+    </resultMap>
+
+    <insert id="insertAttachment"
+            parameterType="com.shixun.attachment.entity.Attachment"
+            useGeneratedKeys="true"
+            keyProperty="attachmentId"
+            keyColumn="attachment_id">
+        INSERT INTO attachment (
+            mail_id,
+            uploader_id,
+            file_name,
+            file_path,
+            file_size,
+            file_type,
+            upload_time
+        ) VALUES (
+            #{mailId},
+            #{uploaderId},
+            #{fileName},
+            #{filePath},
+            #{fileSize},
+            #{fileType},
+            NOW()
+        )
+    </insert>
+
+    <select id="selectById" resultMap="AttachmentResultMap">
+        SELECT attachment_id, mail_id, uploader_id, file_name, file_path, file_size, file_type, upload_time
+        FROM attachment
+        WHERE attachment_id = #{attachmentId}
+    </select>
+
+    <select id="selectVOByMailId" resultMap="AttachmentVOResultMap">
+        SELECT
+            attachment_id,
+            file_name,
+            file_size,
+            file_type,
+            CONCAT('/api/attachment/download/', attachment_id) AS download_url
+        FROM attachment
+        WHERE mail_id = #{mailId}
+        ORDER BY upload_time ASC, attachment_id ASC
+    </select>
+
+    <select id="existsUploadPermission" resultType="boolean">
+        SELECT COUNT(1) > 0
+        FROM mail
+        WHERE mail_id = #{mailId}
+          AND sender_id = #{userId}
+          AND sender_deleted = FALSE
+          AND mail_status = 1
+    </select>
+
+    <select id="existsDownloadPermission" resultType="boolean">
+        SELECT COUNT(1) > 0
+        FROM mail m
+        WHERE m.mail_id = #{mailId}
+          AND m.mail_status = 1
+          AND (
+              m.sender_id = #{userId}
+              OR EXISTS (
+                  SELECT 1
+                  FROM mail_receiver mr
+                  WHERE mr.mail_id = m.mail_id
+                    AND mr.receiver_id = #{userId}
+                    AND mr.receiver_type IN ('TO', 'CC', 'BCC')
+              )
+          )
+    </select>
+
+    <update id="updateMailHasAttachment">
+        UPDATE mail
+        SET has_attachment = TRUE
+        WHERE mail_id = #{mailId}
+    </update>
+</mapper>

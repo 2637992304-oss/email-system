@@ -1,0 +1,146 @@
+@baseUrl = http://localhost:8080
+@aliceToken = replace-with-token-from-login
+@bobToken = replace-with-token-from-login
+@unrelatedUserToken = replace-with-a-valid-token-for-a-user-not-related-to-the-mail
+@mailId = 1
+@attachmentId = 1
+
+### Health check
+GET {{baseUrl}}/api/health
+
+### Unauthorized inbox should return 401
+GET {{baseUrl}}/api/mail/inbox
+
+### Register Alice
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "alice@example.com",
+  "username": "Alice",
+  "password": "123456"
+}
+
+### Register Bob
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "bob@example.com",
+  "username": "Bob",
+  "password": "123456"
+}
+
+### Login Alice, copy data.token to aliceToken
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "alice@example.com",
+  "password": "123456"
+}
+
+### Login Bob, copy data.token to bobToken
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "bob@example.com",
+  "password": "123456"
+}
+
+### Alice sends mail to Bob, copy data.mailId to mailId
+POST {{baseUrl}}/api/mail/send
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{
+  "to": ["bob@example.com"],
+  "cc": [],
+  "subject": "实训通知",
+  "content": "请按时提交周报。"
+}
+
+### Bob inbox should contain the mail
+GET {{baseUrl}}/api/mail/inbox
+Authorization: Bearer {{bobToken}}
+
+### Alice sent box should contain the mail
+GET {{baseUrl}}/api/mail/sent
+Authorization: Bearer {{aliceToken}}
+
+### Bob opens mail detail, which marks the mail as read
+GET {{baseUrl}}/api/mail/detail/{{mailId}}
+Authorization: Bearer {{bobToken}}
+
+### Alice uploads an attachment for the sent mail
+POST {{baseUrl}}/api/attachment/upload
+Authorization: Bearer {{aliceToken}}
+Content-Type: multipart/form-data; boundary=UploadBoundary
+
+--UploadBoundary
+Content-Disposition: form-data; name="mailId"
+
+{{mailId}}
+--UploadBoundary
+Content-Disposition: form-data; name="file"; filename="stage3-demo.txt"
+Content-Type: text/plain
+
+第三阶段附件上传下载测试文件。
+--UploadBoundary--
+
+### Query attachments by mail id
+GET {{baseUrl}}/api/attachment/mail/{{mailId}}
+Authorization: Bearer {{aliceToken}}
+
+### Receiver downloads attachment successfully
+GET {{baseUrl}}/api/attachment/download/{{attachmentId}}
+Authorization: Bearer {{bobToken}}
+
+### Unrelated user cannot query the attachment list
+GET {{baseUrl}}/api/attachment/mail/{{mailId}}
+Authorization: Bearer {{unrelatedUserToken}}
+
+### Unrelated user cannot download the attachment
+GET {{baseUrl}}/api/attachment/download/{{attachmentId}}
+Authorization: Bearer {{unrelatedUserToken}}
+
+### Missing attachment returns 404 without exposing a server path
+GET {{baseUrl}}/api/attachment/download/999999999
+Authorization: Bearer {{aliceToken}}
+
+### Bob marks the mail as unread
+PUT {{baseUrl}}/api/mail/unread/{{mailId}}
+Authorization: Bearer {{bobToken}}
+
+### Bob marks the mail as read
+PUT {{baseUrl}}/api/mail/read/{{mailId}}
+Authorization: Bearer {{bobToken}}
+
+### Bob deletes the mail from inbox
+DELETE {{baseUrl}}/api/mail/{{mailId}}
+Authorization: Bearer {{bobToken}}
+
+### Bob inbox should no longer contain the mail
+GET {{baseUrl}}/api/mail/inbox
+Authorization: Bearer {{bobToken}}
+
+### Bob trash should contain the deleted mail
+GET {{baseUrl}}/api/mail/trash
+Authorization: Bearer {{bobToken}}
+
+### Alice sent box should still contain the mail
+GET {{baseUrl}}/api/mail/sent
+Authorization: Bearer {{aliceToken}}
+
+### Sending to a missing receiver should return a business error
+POST {{baseUrl}}/api/mail/send
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{
+  "to": ["missing@example.com"],
+  "cc": [],
+  "subject": "错误场景",
+  "content": "这个请求应该返回收件人不存在。"
+}

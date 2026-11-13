@@ -1,0 +1,8 @@
+/* Mail System - CSS Modules */
+@import "./base.css";
+@import "./auth.css";
+@import "./dashboard.css";
+@import "./mail-list.css";
+@import "./mail-detail.css";
+@import "./components.css";
+@import "./responsive.css";
