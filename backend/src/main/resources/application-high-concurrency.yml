@@ -1,0 +1,43 @@
+spring:
+  task:
+    scheduling:
+      pool:
+        size: 4
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    username: ${RABBITMQ_USERNAME:mail}
+    password: ${RABBITMQ_PASSWORD}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+    listener:
+      simple:
+        acknowledge-mode: manual
+        concurrency: ${CONSUMERS:2}
+        max-concurrency: ${CONSUMERS:2}
+        prefetch: 4
+  redis:
+    host: ${REDIS_HOST:localhost}
+    timeout: 1500ms
+    connect-timeout: 1500ms
+  datasource:
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+server:
+  tomcat:
+    threads:
+      max: 80
+      min-spare: 8
+    accept-count: 100
+mail:
+  attachment:
+    staging-only: true
+  concurrency:
+    capacity: 10000
+    publish-batch-size: 64
+    publish-delay-ms: 50
+    retry-seconds: 1,5,30
+    lease-seconds: 60
+    rate-capacity: ${RATE_CAPACITY:10}
+    rate-per-minute: ${RATE_PER_MINUTE:10}

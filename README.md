@@ -133,3 +133,8 @@ python scripts/deployment-test.py --phase verify --base-url http://localhost:517
 - 新仓库不继承旧仓库的提交历史。旧仓库公开过的凭据仍必须在供应商/数据库侧撤销或更换。
 
 实际验收范围和限制见 [验收记录](docs/VERIFICATION.md)。源码来源见 [SOURCE.md](SOURCE.md)。
+
+
+## 本地高并发验证
+
+高并发改造使用独立的 Docker Compose 环境，入口为 `scripts/start-high-concurrency.ps1`。启动、迁移、故障验证和压测步骤见 [运行说明](docs/HIGH_CONCURRENCY_RUNBOOK.md)，实际结果见 [测试报告](docs/HIGH_CONCURRENCY_REPORT.md)。本地单机双实例不代表生产高可用，容量只以实测报告为准。

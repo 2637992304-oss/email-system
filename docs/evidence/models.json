@@ -1,0 +1,14 @@
+{
+  "mail": 2000087477,
+  "previous_version": 4,
+  "committed_version": 5,
+  "instance_versions": [
+    5,
+    5
+  ],
+  "snapshot_sha256": [
+    "f66f92b18b658fdca68c090f0c2e6e94bd102e32677291939812f10519e1e315",
+    "f66f92b18b658fdca68c090f0c2e6e94bd102e32677291939812f10519e1e315"
+  ],
+  "pending_learning_jobs": 0
+}

@@ -1,0 +1,20 @@
+{
+  "search_cursor_complete": true,
+  "foreign_search_forbidden": true,
+  "bulk_spam_warning_replaces_previous": true,
+  "self_addressed_search_deduplicated": true,
+  "send_behaviors_persisted": 21,
+  "unique_inbox_mails": 21,
+  "star_flags_preserved": 21,
+  "priority_pages": [
+    20,
+    1
+  ],
+  "priority_read_flag_preserved": true,
+  "filtered_read_count": 1,
+  "future_date_filter_count": 0,
+  "search_metadata_complete": true,
+  "soft_delete_restore": true,
+  "spam_delivered_to_spam_box": 2000100043,
+  "receiver_limit_status": 400
+}

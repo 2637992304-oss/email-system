@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import org.springframework.web.bind.annotation.RequestParam;
+import com.shixun.mail.vo.CursorPage;
 import java.util.Map;
 
 @RestController
@@ -27,25 +29,44 @@ public class MailController {
         this.mailService = mailService;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.beans.factory.ObjectProvider<com.shixun.concurrency.ReliableDelivery> delivery;
     @PostMapping("/send")
-    public ApiResponse<Map<String, Long>> sendMail(@RequestBody SendMailRequest request) {
-        Long mailId = mailService.sendMail(request);
-        return ApiResponse.success("发送成功", Map.of("mailId", mailId));
+    public org.springframework.http.ResponseEntity<?> sendMail(@RequestBody SendMailRequest request,
+        @org.springframework.web.bind.annotation.RequestHeader(value="Idempotency-Key",required=false) String key) {
+        var reliable=delivery.getIfAvailable();
+        if(reliable!=null) return org.springframework.http.ResponseEntity.accepted().body(ApiResponse.success("已提交",reliable.submit(request,key)));
+        Long mailId=mailService.sendMail(request);
+        return org.springframework.http.ResponseEntity.ok(ApiResponse.success("已送达",Map.of("mailId",mailId,"status","DELIVERED")));
+    }
+    @GetMapping("/{mailId}/status")
+    public ApiResponse<?> deliveryStatus(@PathVariable Long mailId) {
+        var reliable=delivery.getIfAvailable();
+        if(reliable==null) throw com.shixun.common.exception.BusinessException.of(503,"异步投递未启用");
+        return ApiResponse.success(reliable.status(mailId,com.shixun.common.security.AuthUserContext.getUserId()));
     }
 
     @GetMapping("/inbox")
-    public ApiResponse<List<MailListVO>> getInbox() {
-        return ApiResponse.success(mailService.getInbox());
+    public ApiResponse<CursorPage<MailListVO>> getInbox(@RequestParam(required=false) String cursor, @RequestParam(defaultValue="20") int size) {
+        return ApiResponse.success(mailService.page("inbox", cursor, size));
     }
 
     @GetMapping("/sent")
-    public ApiResponse<List<MailListVO>> getSentMails() {
-        return ApiResponse.success(mailService.getSentMails());
+    public ApiResponse<CursorPage<MailListVO>> getSentMails(@RequestParam(required=false) String cursor, @RequestParam(defaultValue="20") int size) {
+        return ApiResponse.success(mailService.page("sent", cursor, size));
     }
 
     @GetMapping("/trash")
-    public ApiResponse<List<MailListVO>> getTrashMails() {
-        return ApiResponse.success(mailService.getTrashMails());
+    public ApiResponse<CursorPage<MailListVO>> getTrashMails(@RequestParam(required=false) String cursor, @RequestParam(defaultValue="20") int size) {
+        return ApiResponse.success(mailService.page("trash", cursor, size));
+    }
+
+    @GetMapping("/counts")
+    public ApiResponse<?> folderCounts(){return ApiResponse.success(mailService.folderCounts());}
+
+    @GetMapping("/spam")
+    public ApiResponse<?> spamPage(@RequestParam(required=false) String cursor,@RequestParam(defaultValue="20") int size) {
+        return ApiResponse.success(mailService.page("spam",cursor,size));
     }
 
     @GetMapping("/detail/{mailId}")

@@ -1,0 +1,26 @@
+{
+  "nodes": [
+    {
+      "service": "backend",
+      "jar": "77d1cb00891defe8a58dc7adffad7539488432f29e32f3f51751084603fcac4a",
+      "fault_injection": false,
+      "rate_capacity": 10,
+      "rate_per_minute": 10
+    },
+    {
+      "service": "backend-b",
+      "jar": "77d1cb00891defe8a58dc7adffad7539488432f29e32f3f51751084603fcac4a",
+      "fault_injection": false,
+      "rate_capacity": 10,
+      "rate_per_minute": 10
+    }
+  ],
+  "tasks": {
+    "DELIVERED": 139743
+  },
+  "unpublished_outbox": 0,
+  "duplicate_receivers": 0,
+  "pending_model_jobs": 0,
+  "faults_remaining": 0,
+  "running_benchmark_containers": []
+}

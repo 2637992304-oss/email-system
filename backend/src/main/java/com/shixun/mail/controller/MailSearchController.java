@@ -23,21 +23,21 @@ public class MailSearchController {
     }
 
     @GetMapping("/search")
-    public ApiResponse<List<Mail>> search(
+    public ApiResponse<com.shixun.mail.vo.CursorPage<Mail>> search(
             @RequestParam Long userId,
-            @RequestParam String keyword) {
-        return ApiResponse.success(mailSearchService.search(userId, keyword));
+            @RequestParam String keyword, @RequestParam(required=false) String cursor, @RequestParam(defaultValue="20") int size) {
+        return ApiResponse.success(mailSearchService.search(userId, keyword, cursor, size));
     }
 
     @GetMapping("/filter")
-    public ApiResponse<List<Mail>> filter(
+    public ApiResponse<com.shixun.mail.vo.CursorPage<Mail>> filter(
             @RequestParam Long userId,
             @RequestParam(required = false) Boolean isRead,
             @RequestParam(required = false) Boolean hasAttachment,
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
             @RequestParam(required = false) LocalDateTime startTime,
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-            @RequestParam(required = false) LocalDateTime endTime) {
-        return ApiResponse.success(mailSearchService.filter(userId, isRead, hasAttachment, startTime, endTime));
+            @RequestParam(required = false) LocalDateTime endTime, @RequestParam(required=false) String folder, @RequestParam(required=false) String cursor, @RequestParam(defaultValue="20") int size) {
+        return ApiResponse.success(mailSearchService.filter(userId, isRead, hasAttachment, startTime, endTime, folder, cursor, size));
     }
 }

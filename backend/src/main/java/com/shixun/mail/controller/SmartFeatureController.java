@@ -65,23 +65,10 @@ public class SmartFeatureController {
      * 请求体: { "userId": 1, "folderKey": "inbox" | "sent" | "trash" }
      */
     @PostMapping("/organize")
-    public ApiResponse<List<MailListVO>> organize(@RequestBody(required = false) Map<String, Object> body) {
-        Long userId = com.shixun.common.security.AuthUserContext.getUserId();
-        if (userId == null) {
-            throw BusinessException.of(401, "Unauthorized");
-        }
-        String folderKey = body == null ? "inbox" : body.getOrDefault("folderKey", "inbox").toString();
-
-        List<MailListVO> sorted;
-        switch (folderKey) {
-            case "sent" -> sorted = priorityService.sortMailList(
-                    mailService.getSentMails(), userId);
-            case "trash" -> sorted = priorityService.sortMailList(
-                    mailService.getTrashMails(), userId);
-            default -> sorted = priorityService.sortMailList(
-                    mailService.getInbox(), userId);
-        }
-        return ApiResponse.success("整理完成", sorted);
+    public ApiResponse<?> organize(@RequestBody(required = false) Map<String, Object> body) {
+        String folder=body==null?"inbox":body.getOrDefault("folderKey","inbox").toString();
+        String cursor=body==null?null:(String)body.get("cursor");
+        return ApiResponse.success("整理完成",mailService.organizePage(folder,cursor,20));
     }
 
     @PostMapping("/ai/translate")

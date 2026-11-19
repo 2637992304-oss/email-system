@@ -1,0 +1,8 @@
+{
+  "cpu": {
+    "Name": "AMD Ryzen 5 4500U with Radeon Graphics         ",
+    "NumberOfCores": 6,
+    "NumberOfLogicalProcessors": 6
+  },
+  "memoryBytes": 16505954304
+}

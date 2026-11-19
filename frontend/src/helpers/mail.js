@@ -220,6 +220,7 @@ export function useNotificationStream(options) {
     eventSource = new EventSource(url)
 
     eventSource.addEventListener('connected', (event) => {
+      options.onNewMail?.({ reconnected: true })
       try {
         console.log('[SSE] 已连接:', JSON.parse(event.data))
       } catch {

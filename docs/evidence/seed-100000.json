@@ -1,0 +1,6 @@
+{
+  "seed": 42,
+  "requested_count": 100000,
+  "result": "100000\n100000\nmail_system.mail\tanalyze\tstatus\tOK\nmail_system.mail_receiver\tanalyze\tstatus\tOK",
+  "elapsed_seconds": 7.436
+}

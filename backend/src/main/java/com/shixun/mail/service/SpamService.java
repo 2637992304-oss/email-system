@@ -16,7 +16,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -145,7 +147,7 @@ public class SpamService {
                     .riskReason("命中垃圾关键词: " + String.join(",", matched))
                     .detectTime(LocalDateTime.now())
                     .build();
-            spamRecordMapper.insert(record);
+            spamRecordMapper.insertForMail(record);
             return true;
         }
 
@@ -158,7 +160,7 @@ public class SpamService {
                     .riskReason("发件频率异常: 1秒内发送" + recentCount + "封")
                     .detectTime(LocalDateTime.now())
                     .build();
-            spamRecordMapper.insert(record);
+            spamRecordMapper.insertForMail(record);
             return true;
         }
 
@@ -171,7 +173,7 @@ public class SpamService {
                     .riskReason(buildSenderRiskReason(senderId))
                     .detectTime(LocalDateTime.now())
                     .build();
-            spamRecordMapper.insert(record);
+            spamRecordMapper.insertForMail(record);
             return true;
         }
 
@@ -183,7 +185,7 @@ public class SpamService {
                     .hitKeyword(String.join(",", dictMatched)).riskScore(85)
                     .riskReason("命中垃圾词: " + String.join(",", dictMatched))
                     .detectTime(LocalDateTime.now()).build();
-            spamRecordMapper.insert(record);
+            spamRecordMapper.insertForMail(record);
             return true;
         }
 
@@ -201,7 +203,7 @@ public class SpamService {
                             dlEngine.getEmaAccuracy() * 100))
                     .detectTime(LocalDateTime.now())
                     .build();
-            spamRecordMapper.insert(record);
+            spamRecordMapper.insertForMail(record);
             return true;
         }
 
@@ -253,10 +255,8 @@ public class SpamService {
     public int getSpamReportCount(Long senderId) {
         String sql = """
             SELECT COUNT(*)
-            FROM spam_record sr
-            JOIN mail m ON sr.mail_id = m.mail_id
-            WHERE m.sender_id = ?
-              AND sr.created_at >= ?
+            FROM spam_record
+            WHERE sender_id = ? AND created_at >= ?
             """;
         try {
             Long count = jdbcTemplate.queryForObject(sql, Long.class,
@@ -348,30 +348,32 @@ public class SpamService {
     public void createSpamWarnings(String senderEmail, java.util.List<Long> recipientIds, Long mailId) {
         if (senderEmail == null || recipientIds == null || recipientIds.isEmpty()) return;
         String email = senderEmail.toLowerCase().trim();
-        Set<Long> uniqueRecipients = new HashSet<>(recipientIds);
-        for (Long recipientId : uniqueRecipients) {
-            try {
-                // 已拉黑 → 跳过（已经在黑名单，无需再警告）
-                if (userContactListMapper.existsByEmailAndType(recipientId, email, "BLACKLIST")) {
-                    continue;
-                }
-                // 删除该收件人对该发件人的旧警告（IGNORED/BLOCKED），以便创建新警告
-                LambdaQueryWrapper<SpamWarning> delWrapper = new LambdaQueryWrapper<>();
-                delWrapper.eq(SpamWarning::getRecipientId, recipientId)
-                          .eq(SpamWarning::getSenderEmail, email);
-                spamWarningMapper.delete(delWrapper);
-                // 创建新警告
-                SpamWarning warning = SpamWarning.builder()
-                        .recipientId(recipientId)
-                        .senderEmail(email)
-                        .mailId(mailId)
-                        .status("PENDING")
-                        .createdAt(LocalDateTime.now())
-                        .build();
-                spamWarningMapper.insert(warning);
-            } catch (DataAccessException ignored) {
-                // 插入失败不中断
-            }
+        List<Long> recipients = recipientIds.stream().distinct().sorted().collect(Collectors.toList());
+        String placeholders = String.join(",", Collections.nCopies(recipients.size(), "?"));
+        List<Object> lookupArgs = new ArrayList<>();
+        lookupArgs.add(email);
+        lookupArgs.addAll(recipients);
+        try {
+            Set<Long> blocked = new HashSet<>(jdbcTemplate.queryForList(
+                "SELECT user_id FROM user_contact_list WHERE contact_email=? AND list_type='BLACKLIST' "
+                    + "AND user_id IN (" + placeholders + ")", Long.class, lookupArgs.toArray()));
+            List<Long> eligible = recipients.stream().filter(id -> !blocked.contains(id)).collect(Collectors.toList());
+            if (eligible.isEmpty()) return;
+
+            List<Object> deleteArgs = new ArrayList<>();
+            deleteArgs.add(email);
+            deleteArgs.addAll(eligible);
+            jdbcTemplate.update("DELETE FROM spam_warning WHERE sender_email=? AND recipient_id IN ("
+                + String.join(",", Collections.nCopies(eligible.size(), "?")) + ")", deleteArgs.toArray());
+            jdbcTemplate.batchUpdate(
+                "INSERT INTO spam_warning(recipient_id,sender_email,mail_id,status,created_at) VALUES (?,?,?,'PENDING',NOW())",
+                eligible, 100, (statement, recipientId) -> {
+                    statement.setLong(1, recipientId);
+                    statement.setString(2, email);
+                    statement.setLong(3, mailId);
+                });
+        } catch (DataAccessException ignored) {
+            // Warning writes are supplementary and do not prevent delivery.
         }
     }
 
@@ -613,10 +615,8 @@ public class SpamService {
             // 指标2: 90天内有垃圾前科 ≥ 50 次
             String spamHistorySql = """
                 SELECT COUNT(*)
-                FROM spam_record sr
-                JOIN mail m ON sr.mail_id = m.mail_id
-                WHERE m.sender_id = ?
-                  AND sr.created_at >= ?
+                FROM spam_record
+                WHERE sender_id = ? AND created_at >= ?
                 """;
             LocalDateTime ninetyDaysAgo = LocalDateTime.now().minusDays(90);
             Long spamHistoryCount = jdbcTemplate.queryForObject(
@@ -648,7 +648,7 @@ public class SpamService {
 
             // 垃圾前科检查
             Long spamCount = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(*) FROM spam_record sr JOIN mail m ON sr.mail_id = m.mail_id WHERE m.sender_id = ? AND sr.created_at >= ?",
+                    "SELECT COUNT(*) FROM spam_record WHERE sender_id = ? AND created_at >= ?",
                     Long.class, senderId, LocalDateTime.now().minusDays(90));
             if (spamCount != null && spamCount >= 50) {
                 sb.append("有垃圾邮件前科(").append(spamCount).append("次); ");
@@ -665,10 +665,8 @@ public class SpamService {
     private long countRecentFromSender(Long senderId, int minutes) {
         String sql = """
             SELECT COUNT(*)
-            FROM spam_record sr
-            JOIN mail m ON sr.mail_id = m.mail_id
-            WHERE m.sender_id = ?
-              AND sr.created_at >= ?
+            FROM spam_record
+            WHERE sender_id = ? AND created_at >= ?
             """;
         try {
             Long count = jdbcTemplate.queryForObject(sql, Long.class,
@@ -682,10 +680,8 @@ public class SpamService {
     private long countRecentFromSenderSeconds(Long senderId, int seconds) {
         String sql = """
             SELECT COUNT(*)
-            FROM spam_record sr
-            JOIN mail m ON sr.mail_id = m.mail_id
-            WHERE m.sender_id = ?
-              AND sr.created_at >= ?
+            FROM spam_record
+            WHERE sender_id = ? AND created_at >= ?
             """;
         try {
             Long count = jdbcTemplate.queryForObject(sql, Long.class,
@@ -971,7 +967,7 @@ public class SpamService {
                 .detectTime(LocalDateTime.now())
                 .build();
         try {
-            spamRecordMapper.insert(record);
+            spamRecordMapper.insertForMail(record);
         } catch (DataAccessException ignored) {
             // 并发插入导致的唯一键冲突，忽略
         }

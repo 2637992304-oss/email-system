@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS model_job (id BIGINT AUTO_INCREMENT PRIMARY KEY, payload JSON NOT NULL, done BOOLEAN NOT NULL DEFAULT FALSE);
+CREATE TABLE IF NOT EXISTS model_version (id INT PRIMARY KEY, version BIGINT NOT NULL DEFAULT 0);
+INSERT IGNORE INTO model_version VALUES (1,0);
+
+CREATE TABLE IF NOT EXISTS mail_priority_score (user_id BIGINT NOT NULL, mail_id BIGINT NOT NULL, score INT NOT NULL, PRIMARY KEY(user_id,mail_id), KEY priority_page(user_id,score DESC,mail_id DESC));
+
+CREATE TABLE IF NOT EXISTS delivery_test_fault (phase VARCHAR(40) PRIMARY KEY, remaining INT NOT NULL DEFAULT 0);

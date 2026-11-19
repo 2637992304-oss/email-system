@@ -10,4 +10,5 @@ public class SendMailRequest {
     private List<String> bcc;
     private String subject;
     private String content;
+    private List<Long> attachmentIds;
 }

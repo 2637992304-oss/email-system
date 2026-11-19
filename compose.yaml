@@ -10,6 +10,12 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/migrations/V002__reliable_delivery.sql:/docker-entrypoint-initdb.d/02-delivery.sql:ro
+      - ./database/migrations/V003__models_and_priority.sql:/docker-entrypoint-initdb.d/03-models.sql:ro
+      - ./database/migrations/V004__cursor_indexes.sql:/docker-entrypoint-initdb.d/04-cursor-indexes.sql:ro
+      - ./database/migrations/V005__spam_classification_types.sql:/docker-entrypoint-initdb.d/05-spam-types.sql:ro
+      - ./database/migrations/V006__receiver_search_order.sql:/docker-entrypoint-initdb.d/06-search-order.sql:ro
+      - ./database/migrations/V007__sender_spam_history.sql:/docker-entrypoint-initdb.d/07-spam-history.sql:ro
     healthcheck:
       test: [CMD-SHELL, 'MYSQL_PWD="$$MYSQL_PASSWORD" mysql -h 127.0.0.1 -u "$$MYSQL_USER" mail_system -e "SELECT 1 FROM user LIMIT 1"']
       interval: 5s

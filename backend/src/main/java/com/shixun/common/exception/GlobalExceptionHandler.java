@@ -11,8 +11,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException ex) {
-        return ResponseEntity.status(resolveHttpStatus(ex.getCode()))
-                .body(ApiResponse.failure(ex.getCode(), ex.getMessage()));
+        var response = ResponseEntity.status(resolveHttpStatus(ex.getCode()));
+        if (ex.getCode() == 429) response.header("Retry-After", "6");
+        return response.body(ApiResponse.failure(ex.getCode(), ex.getMessage()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

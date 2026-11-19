@@ -15,6 +15,12 @@ public class Mail {
     private Long mailId;
 
     private Long senderId;
+    @com.baomidou.mybatisplus.annotation.TableField(exist=false)
+    private String senderName;
+    @com.baomidou.mybatisplus.annotation.TableField(exist=false)
+    private String senderEmail;
+    @com.baomidou.mybatisplus.annotation.TableField(exist=false)
+    private Boolean starred;
 
     private String subject;
 
@@ -25,6 +31,7 @@ public class Mail {
     private Boolean hasAttachment;
 
     /** 是否为垃圾邮件 — 映射 is_spam */
+    @com.baomidou.mybatisplus.annotation.TableField("is_spam")
     private Boolean spam;
 
     private Integer priority;

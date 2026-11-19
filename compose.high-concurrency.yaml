@@ -1,0 +1,90 @@
+name: email-hc
+x-app: &app
+  build:
+    context: ./backend
+    dockerfile: Dockerfile.high-concurrency
+  environment: &app-env
+    TZ: ${TZ:-Asia/Shanghai}
+    SPRING_PROFILES_ACTIVE: high-concurrency
+    MAIL_TEST_FAULT_ENABLED: ${HC_FAULTS_ENABLED:-false}
+    DB_URL: jdbc:mysql://db:3306/mail_system?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true
+    DB_USERNAME: ${DB_USERNAME:-mail_app}
+    DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
+    JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+    RABBITMQ_HOST: rabbitmq
+    RABBITMQ_USERNAME: mail
+    RABBITMQ_PASSWORD: ${DB_PASSWORD}
+    REDIS_HOST: redis
+    ATTACHMENT_ROOT: /app/data/attachments
+    LLM_ENABLED: "false"
+    DB_POOL_SIZE: ${HC_DB_POOL_SIZE:-10}
+    CONSUMERS: ${HC_CONSUMERS:-2}
+    RATE_CAPACITY: ${RATE_CAPACITY:-10}
+    RATE_PER_MINUTE: ${RATE_PER_MINUTE:-10}
+  volumes:
+    - hc-files:/app/data
+  depends_on:
+    db: { condition: service_healthy }
+    rabbitmq: { condition: service_healthy }
+    redis: { condition: service_healthy }
+  cpus: 1.0
+  mem_limit: 768m
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      MYSQL_DATABASE: mail_system
+      MYSQL_USER: ${DB_USERNAME:-mail_app}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - hc-db:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/migrations/V002__reliable_delivery.sql:/docker-entrypoint-initdb.d/02-delivery.sql:ro
+      - ./database/migrations/V003__models_and_priority.sql:/docker-entrypoint-initdb.d/03-models.sql:ro
+      - ./database/migrations/V004__cursor_indexes.sql:/docker-entrypoint-initdb.d/04-cursor-indexes.sql:ro
+      - ./database/migrations/V005__spam_classification_types.sql:/docker-entrypoint-initdb.d/05-spam-types.sql:ro
+      - ./database/migrations/V006__receiver_search_order.sql:/docker-entrypoint-initdb.d/06-search-order.sql:ro
+      - ./database/migrations/V007__sender_spam_history.sql:/docker-entrypoint-initdb.d/07-spam-history.sql:ro
+    healthcheck:
+      test: [CMD-SHELL, 'MYSQL_PWD="$$MYSQL_PASSWORD" mysql -h 127.0.0.1 -u "$$MYSQL_USER" mail_system -e "SELECT 1 FROM delivery_admission"']
+      interval: 5s
+      timeout: 5s
+      retries: 40
+    cpus: 2.0
+    mem_limit: 1g
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    environment:
+      RABBITMQ_DEFAULT_USER: mail
+      RABBITMQ_DEFAULT_PASS: ${DB_PASSWORD}
+    volumes: [hc-rabbit:/var/lib/rabbitmq]
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, ping]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+    mem_limit: 512m
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 128m
+  backend:
+    <<: *app
+  backend-b:
+    <<: *app
+  frontend:
+    build: ./frontend
+    ports: ["127.0.0.1:${HC_WEB_PORT:-5180}:80"]
+    volumes:
+      - ./frontend/nginx.high-concurrency.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on: [backend,backend-b]
+volumes:
+  hc-db:
+  hc-files:
+  hc-rabbit:

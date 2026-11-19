@@ -92,6 +92,12 @@ public class MailService {
         mail.setSenderDeleted(false);
         mailMapper.insertMail(mail);
 
+        if (request.getAttachmentIds()!=null) for (Long id:new java.util.LinkedHashSet<>(request.getAttachmentIds())) {
+            if(jdbcTemplate.update("UPDATE attachment SET mail_id=? WHERE attachment_id=? AND uploader_id=? AND mail_id IS NULL",mail.getMailId(),id,currentUserId)!=1)
+                throw BusinessException.of(400,"附件无效或不属于当前用户");
+            jdbcTemplate.update("UPDATE mail SET has_attachment=TRUE WHERE mail_id=?",mail.getMailId());
+        }
+
         // 收集所有收件人ID
         List<Long> allRecipientIds = new ArrayList<>();
         toUsers.forEach(u -> allRecipientIds.add(u.getUserId()));
@@ -145,28 +151,98 @@ public class MailService {
         return mail.getMailId();
     }
 
-    public List<MailListVO> getInbox() {
-        return mailMapper.selectInboxList(requireCurrentUserId());
+    public void deliverAccepted(Long mailId, Long senderId, List<java.util.Map<String,Object>> recipients) {
+        Mail mail = mailMapper.selectById(mailId);
+        User sender = userMapper.findById(senderId);
+        List<Long> ids = recipients.stream().map(r -> ((Number)r.get("id")).longValue()).collect(Collectors.toList());
+        boolean spam = spamService.isSenderBlockedByRecipients(sender.getEmail(), ids);
+        if (spam) spamService.recordBlockedSenderSpam(mailId,sender.getEmail());
+        if (!spam) spam = spamService.isSpam(mailId,senderId,mail.getSubject(),mail.getContent());
+        mailMapper.updateSpamFlag(mailId,spam);
+        if (spam) spamService.createSpamWarnings(sender.getEmail(),ids,mailId);
+        jdbcTemplate.batchUpdate("INSERT INTO mail_receiver(mail_id,receiver_id,receiver_type,is_read,is_deleted,receive_time,mail_send_time) VALUES (?,?,?,FALSE,FALSE,NOW(),?)",
+            recipients, 100, (ps,r) -> { ps.setLong(1,mailId); ps.setLong(2,((Number)r.get("id")).longValue()); ps.setString(3,(String)r.get("type")); ps.setObject(4,mail.getSendTime()); });
+        try {
+            jdbcTemplate.batchUpdate(
+                "INSERT INTO user_behavior(user_id,mail_id,sender_id,behavior_type,created_at) VALUES (?,?,?,'SEND',NOW())",
+                ids, 100, (ps, recipientId) -> {
+                    ps.setLong(1, senderId);
+                    ps.setLong(2, mailId);
+                    ps.setLong(3, recipientId);
+                });
+        } catch (org.springframework.dao.DataAccessException ignored) {
+            // Behavior history is supplementary and does not prevent delivery.
+        }
     }
 
-    public List<MailListVO> getSentMails() {
-        Long currentUserId = requireCurrentUserId();
-        List<MailListVO> list = mailMapper.selectSentBaseList(currentUserId);
-        for (MailListVO item : list) {
-            item.setReceiverNames(mailMapper.selectReceiverNamesByMailId(item.getMailId()));
-            item.setReceiverEmails(mailMapper.selectReceiverEmailsByMailId(item.getMailId()));
+    public com.shixun.mail.vo.CursorPage<MailListVO> page(String folder, String cursor, int size) {
+        size = Math.max(1, Math.min(size, 100));
+        LocalDateTime time = null; Long id = null;
+        if (cursor != null && !cursor.isBlank()) {
+            try {
+                String[] parts = new String(java.util.Base64.getUrlDecoder().decode(cursor), java.nio.charset.StandardCharsets.UTF_8).split("\\|", -1);
+                time = LocalDateTime.parse(parts[0]); id = Long.valueOf(parts[1]);
+                if (parts.length != 2 || id <= 0) throw new IllegalArgumentException();
+            } catch (Exception e) { throw BusinessException.of(400, "无效分页游标"); }
         }
-        return list;
+        List<MailListVO> rows = mailMapper.selectPage(requireCurrentUserId(), folder, time, id, size + 1);
+        boolean more = rows.size() > size;
+        if (more) rows = new ArrayList<>(rows.subList(0, size));
+        if (!rows.isEmpty()) {
+            var recipients = mailMapper.selectPageRecipients(rows.stream().map(MailListVO::getMailId).collect(Collectors.toList()));
+            for (var row : rows) {
+                var matching = recipients.stream().filter(r -> ((Number) r.get("mail_id")).longValue() == row.getMailId()).collect(Collectors.toList());
+                row.setReceiverNames(matching.stream().map(r -> (String)r.get("username")).collect(Collectors.toList()));
+                row.setReceiverEmails(matching.stream().map(r -> (String)r.get("email")).collect(Collectors.toList()));
+            }
+        }
+        String next = null;
+        if (more) {
+            var last = rows.get(rows.size()-1);
+            var lastTime=java.util.Set.of("inbox","spam").contains(folder)?last.getReceiveTime():last.getSendTime();
+            next = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString((lastTime+"|"+last.getMailId()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+        return new com.shixun.mail.vo.CursorPage<>(rows,next,more);
+    }
+    public List<MailListVO> getInbox() { return page("inbox",null,20).items(); }
+    public List<MailListVO> getSentMails() { return page("sent",null,20).items(); }
+    public List<MailListVO> getTrashMails() { return page("trash",null,20).items(); }
+
+    public com.shixun.mail.vo.CursorPage<MailListVO> organizePage(String folder,String cursor,int size) {
+        Long user=requireCurrentUserId();
+        if(!java.util.Set.of("inbox","sent","trash").contains(folder)) throw BusinessException.of(400,"无效文件夹");
+        if(cursor==null || cursor.isBlank()) {
+            String next=null;
+            do {
+                var batch=page(folder,next,100);
+                var scored=priorityService.sortMailList(new ArrayList<>(batch.items()),user);
+                if(!scored.isEmpty()) jdbcTemplate.batchUpdate("INSERT INTO mail_priority_score(user_id,mail_id,score) VALUES (?,?,?) ON DUPLICATE KEY UPDATE score=VALUES(score)",scored,100,(ps,m)->{ps.setLong(1,user);ps.setLong(2,m.getMailId());ps.setInt(3,m.getPriorityScore());});
+                next=batch.nextCursor();
+            }while(next!=null);
+        }
+        Integer score=null;Long id=null;
+        if(cursor!=null && !cursor.isBlank()) {
+            try {var c=new String(java.util.Base64.getUrlDecoder().decode(cursor),java.nio.charset.StandardCharsets.UTF_8).split("\\|");score=Integer.valueOf(c[0]);id=Long.valueOf(c[1]);}
+            catch(Exception e){throw BusinessException.of(400,"无效分页游标");}
+        }
+        size=Math.max(1,Math.min(100,size));
+        var rows=mailMapper.selectPriorityPage(user,folder,score,id,size+1);
+        boolean more=rows.size()>size;if(more)rows=new ArrayList<>(rows.subList(0,size));
+        String next=null;
+        if(more){var last=rows.get(rows.size()-1);next=java.util.Base64.getUrlEncoder().withoutPadding().encodeToString((last.getPriorityScore()+"|"+last.getMailId()).getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+        return new com.shixun.mail.vo.CursorPage<>(rows,next,more);
     }
 
-    public List<MailListVO> getTrashMails() {
-        Long currentUserId = requireCurrentUserId();
-        List<MailListVO> list = mailMapper.selectTrashBaseList(currentUserId);
-        for (MailListVO item : list) {
-            item.setReceiverNames(mailMapper.selectReceiverNamesByMailId(item.getMailId()));
-            item.setReceiverEmails(mailMapper.selectReceiverEmailsByMailId(item.getMailId()));
-        }
-        return list;
+    public java.util.Map<String,Object> folderCounts() {
+        Long u=requireCurrentUserId();
+        var counts=new java.util.HashMap<String,Object>();
+        var inbox=jdbcTemplate.queryForMap("SELECT COUNT(*) total,COALESCE(SUM(m.is_spam),0) spam,COALESCE(SUM(NOT mr.is_read AND NOT m.is_spam),0) unread,COALESCE(SUM(NOT mr.is_read AND m.is_spam),0) spamUnread FROM mail_receiver mr JOIN mail m ON m.mail_id=mr.mail_id WHERE mr.receiver_id=? AND mr.is_deleted=FALSE AND m.mail_status=1",u);
+        counts.put("inbox",((Number)inbox.get("total")).longValue()-((Number)inbox.get("spam")).longValue());
+        counts.put("spam",inbox.get("spam"));counts.put("unread",inbox.get("unread"));counts.put("spamUnread",inbox.get("spamUnread"));
+        counts.put("sent",jdbcTemplate.queryForObject("SELECT COUNT(*) FROM mail WHERE sender_id=? AND sender_deleted=FALSE AND mail_status=1",Long.class,u));
+        counts.put("trash",jdbcTemplate.queryForObject("SELECT COUNT(*) FROM (SELECT mail_id FROM mail WHERE sender_id=? AND sender_deleted=TRUE AND mail_status=1 UNION SELECT mr.mail_id FROM mail_receiver mr JOIN mail m ON m.mail_id=mr.mail_id WHERE mr.receiver_id=? AND mr.is_deleted=TRUE AND m.mail_status=1) deleted",Long.class,u,u));
+        counts.put("starred",jdbcTemplate.queryForObject("SELECT COUNT(*) FROM mail_star s JOIN mail m ON m.mail_id=s.mail_id WHERE s.user_id=? AND m.mail_status=1 AND ((m.sender_id=? AND m.sender_deleted=FALSE) OR EXISTS(SELECT 1 FROM mail_receiver mr WHERE mr.mail_id=m.mail_id AND mr.receiver_id=? AND mr.is_deleted=FALSE))",Long.class,u,u,u));
+        return counts;
     }
 
     public MailDetailVO getMailDetail(Long mailId) {

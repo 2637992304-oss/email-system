@@ -7,6 +7,9 @@ import {
   deleteMail,
   downloadAttachment,
   getInboxMails,
+  getFolderCounts,
+  getSpamMails,
+  getDeliveryStatus,
   getMailDetail,
   getNotificationOnlineCount,
   getSpamIds,
@@ -30,6 +33,7 @@ import {
   reportNotSpam,
   reportSpam,
   searchMails,
+  filterMails,
   sendMail,
   summarizeMail,
   translateMailToChinese,
@@ -233,6 +237,7 @@ const {
   getToken: () => authState.token,
   getUserId: () => authState.user?.userId,
   onNewMail: (mail) => {
+    if (mail.reconnected) { refreshVisibleMailbox(); refreshFolderCounts(); return }
     const targetFolder = isMailSpam(mail) ? 'spam' : 'inbox'
     folderCounts.value = {
       ...folderCounts.value,
@@ -244,6 +249,7 @@ const {
       inboxUnreadCount.value++
     }
     refreshFolderCounts()
+    if (activeFolderKey.value === targetFolder) refreshVisibleMailbox()
   }
 })
 
@@ -860,7 +866,7 @@ function setMailStarred(mailId, starred) {
 }
 
 function syncStarredIdsFromList(list) {
-  starredMailIds.value = buildStarredIdSet(list)
+  starredMailIds.value = new Set([...starredMailIds.value, ...buildStarredIdSet(list)])
   refreshOrganizedStarPriority()
 }
 
@@ -872,25 +878,8 @@ function isMailSpam(mail, spamSet = spamMailIds.value) {
 }
 
 async function fetchInboxAndSpamMails() {
-  const [inboxResult, spamIdsResult] = await Promise.allSettled([getInboxMails(), getSpamIds()])
-  if (inboxResult.status === 'rejected') {
-    throw inboxResult.reason
-  }
-  if (spamIdsResult.status === 'fulfilled') {
-    spamMailIds.value = toIdSet(spamIdsResult.value)
-  }
-
-  const cleanInbox = []
-  const spamInbox = []
-  for (const mail of inboxResult.value || []) {
-    if (isMailSpam(mail)) {
-      spamInbox.push({ ...mail, spamFlag: true })
-    } else {
-      cleanInbox.push(mail)
-    }
-  }
-
-  return { inbox: cleanInbox, spam: spamInbox }
+  const [inbox, spam] = await Promise.all([getInboxMails(), getSpamMails()])
+  return { inbox, spam }
 }
 
 async function fetchFolderMails(folderKey) {
@@ -930,50 +919,25 @@ function applyFolderCount(folderKey, list) {
   }
 }
 
-async function refreshFolderCounts(overrides = {}) {
-  const requestId = ++folderCountsRequestId
-  const nextCounts = { ...folderCounts.value }
-  let nextInboxUnreadCount = inboxUnreadCount.value
-  let nextSpamUnreadCount = spamUnreadCount.value
-  const hasInboxOverride = Object.prototype.hasOwnProperty.call(overrides, 'inbox')
-  const hasSpamOverride = Object.prototype.hasOwnProperty.call(overrides, 'spam')
-  const inboxSpamRequest = hasInboxOverride && hasSpamOverride ? null : fetchInboxAndSpamMails()
-
-  const tasks = BASE_FOLDERS.map(async (folder) => {
-    const hasOverride = Object.prototype.hasOwnProperty.call(overrides, folder.key)
-    let data
-    if (hasOverride) {
-      data = overrides[folder.key]
-    } else if (folder.key === 'inbox' || folder.key === 'spam') {
-      data = (await inboxSpamRequest)[folder.key]
-    } else {
-      data = await fetchFolderMails(folder.key)
-    }
-    nextCounts[folder.key] = (data || []).length
-    if (folder.key === 'inbox') {
-      nextInboxUnreadCount = (data || []).filter((mail) => !resolveReadState(mail)).length
-    }
-    if (folder.key === 'spam') {
-      nextSpamUnreadCount = (data || []).filter((mail) => !resolveReadState(mail)).length
-    }
-  })
-
-  const results = await Promise.allSettled(tasks)
-  if (requestId !== folderCountsRequestId) return
-
-  folderCounts.value = nextCounts
-  inboxUnreadCount.value = nextInboxUnreadCount
-  spamUnreadCount.value = nextSpamUnreadCount
-
-  const failed = results.find((result) => result.status === 'rejected')
-  if (failed) {
-    console.warn('文件夹计数刷新失败:', failed.reason)
-  }
+async function refreshFolderCounts() {
+  const id=++folderCountsRequestId
+  try {
+    const counts=await getFolderCounts()
+    if(id!==folderCountsRequestId)return
+    folderCounts.value={...folderCounts.value,...counts,drafts:getDraftFolderMails().length}
+    inboxUnreadCount.value=counts.unread
+    spamUnreadCount.value=counts.spamUnread
+  } catch(e) { console.warn('文件夹计数刷新失败',e.message) }
 }
 
 const formatTime = formatMailTime
 
 function normalizeListItem(mail) {
+  if (typeof mail.starred === 'boolean') {
+    const stars = new Set(starredMailIds.value)
+    if (mail.starred) stars.add(normalizeMailId(mail.mailId)); else stars.delete(normalizeMailId(mail.mailId))
+    starredMailIds.value = stars
+  }
   return normalizeMailListItem(mail, {
     fallbackRead: ['sent', 'drafts'].includes(activeFolderKey.value)
   })
@@ -1062,7 +1026,7 @@ function applyMailFiltersToList(list, filters) {
 }
 
 async function enrichSearchLikeListItems(items) {
-  if (!items.length) return items
+  if (!items.length || items.every(item => item.senderName && item.senderEmail)) return items
 
   const metadataByMailId = new Map()
   const addMetadata = (list, options = {}) => {
@@ -1095,7 +1059,20 @@ async function enrichSearchLikeListItems(items) {
   return items.map((item) => mergeListItemMetadata(item, metadataByMailId.get(item.mailId)))
 }
 
+async function refreshVisibleMailbox() {
+  const folder = activeFolderKey.value
+  if (loadingList.value || organized.value || activeServerFilters || !['inbox','sent','spam','trash','starred'].includes(folder)) return
+  try {
+    const data = await fetchFolderMails(folder)
+    if (folder !== activeFolderKey.value || loadingList.value) return
+    mails.value = data.map(normalizeListItem)
+    nextMailCursor.value = data.nextCursor
+    moreMailPages.value = data.hasMore
+  } catch(e) { console.warn('邮件刷新失败',e.message) }
+}
+
 async function loadFolder(folderKey = activeFolderKey.value) {
+  activeServerFilters = null
   const requestId = ++listRequestId
   resetFeedback()
   loadingList.value = true
@@ -1114,8 +1091,10 @@ async function loadFolder(folderKey = activeFolderKey.value) {
     if (folderKey === 'starred') {
       syncStarredIdsFromList(data)
     }
+    nextMailCursor.value = data?.nextCursor || null
+    moreMailPages.value = Boolean(data?.hasMore)
     mails.value = (data || []).map(normalizeListItem)
-    applyFolderCount(folderKey, data)
+    if (folderKey === 'drafts') applyFolderCount(folderKey, data)
     refreshFolderCounts({ [folderKey]: data })
   } catch (err) {
     if (requestId !== listRequestId) return
@@ -1221,6 +1200,7 @@ async function handleMailAiAction(action) {
 }
 
 async function handleSearch() {
+  activeServerFilters = null
   const keyword = searchKeyword.value.trim()
   if (!keyword) {
     await loadFolder('inbox')
@@ -1236,8 +1216,11 @@ async function handleSearch() {
   detailRequestId++
   loadingDetail.value = false
   try {
+    organized.value = false
     const data = await searchMails(authState.user.userId, keyword)
     if (requestId !== listRequestId) return
+    nextMailCursor.value = data?.nextCursor || null
+    moreMailPages.value = Boolean(data?.hasMore)
     const listItems = (data || []).map(normalizeListItem)
     mails.value = await enrichSearchLikeListItems(listItems)
     if (requestId !== listRequestId) return
@@ -1270,10 +1253,22 @@ async function applyFilters() {
   }
 
   try {
-    const data = await fetchFolderMails(sourceFolderKey)
+    organized.value = false
+    const localTime = date => new Date(date.getTime() - date.getTimezoneOffset()*60000).toISOString().slice(0,19)
+    const now = new Date()
+    const range = filterForm.timeRange
+    if (range === 'today') filters.startTime = localTime(getStartOfToday())
+    if (range === 'last7') filters.startTime = localTime(new Date(now.getTime()-7*86400000))
+    if (range === 'last30') filters.startTime = localTime(new Date(now.getTime()-30*86400000))
+    if (range === 'thisYear') filters.startTime = localTime(new Date(now.getFullYear(),0,1))
+    if (range === 'older30') filters.endTime = localTime(new Date(now.getTime()-30*86400000))
+    activeServerFilters = { ...filters, folder: sourceFolderKey }
+    const data = await filterMails(authState.user.userId, activeServerFilters)
     if (requestId !== listRequestId) return
     const listItems = (data || []).map(normalizeListItem)
-    mails.value = applyMailFiltersToList(listItems, filters)
+    mails.value = listItems
+    nextMailCursor.value = data.nextCursor
+    moreMailPages.value = data.hasMore
     showFilters.value = false
   } catch (err) {
     if (requestId !== listRequestId) return
@@ -1309,18 +1304,17 @@ async function handleReadToggle(read) {
 }
 
 async function handleOrganize() {
-  if (organized.value) {
-    mails.value = [...originalMailOrder.value]
-    organized.value = false
-    organizedPriorityOrder.value = []
-    return
-  }
-
+  if (loadingList.value) return
+  if (organized.value) { await loadFolder(activeFolderKey.value); return }
+  activeServerFilters = null
   resetFeedback()
+  loadingList.value = true
   try {
     originalMailOrder.value = [...mails.value]
 
     const sortedMails = await organizeMails(authState.user.userId, activeFolderKey.value)
+    nextMailCursor.value = sortedMails.nextCursor
+    moreMailPages.value = sortedMails.hasMore
     const visibleMails = activeFolderKey.value === 'inbox'
       ? (sortedMails || []).filter((mail) => !isMailSpam(mail))
       : sortedMails || []
@@ -1332,7 +1326,7 @@ async function handleOrganize() {
     message.value = '邮件已按优先级排序，星标邮件已置顶'
   } catch (err) {
     error.value = err.message || '整理失败'
-  }
+  } finally { loadingList.value = false }
 }
 
 async function handleDelete() {
@@ -1806,6 +1800,40 @@ function clearSelectedFiles() {
   resetComposeFileInput()
 }
 
+let pendingSubmission = null
+let deliveryPollingActive = true
+const nextMailCursor = ref(null)
+let activeServerFilters = null
+const moreMailPages = ref(false)
+async function loadMoreMails() {
+  const folder = activeFolderKey.value
+  const get = activeServerFilters ? (cursor) => filterMails(authState.user.userId, { ...activeServerFilters, cursor }) : organized.value ? (cursor) => organizeMails(authState.user.userId, folder, cursor) : folder === 'search' ? (cursor) => searchMails(authState.user.userId, searchKeyword.value.trim(), cursor) : { inbox: getInboxMails, sent: getSentMails, trash: getTrashMails, spam: getSpamMails, starred: getStarredMails }[folder]
+  if (!get || loadingList.value) return
+  loadingList.value = true
+  try {
+    const data = await get(nextMailCursor.value)
+    if (activeFolderKey.value !== folder) return
+    const items = data.map(normalizeListItem)
+    if (organized.value) { organizedPriorityOrder.value.push(...items); mails.value = sortStarredFirst(organizedPriorityOrder.value) }
+    else mails.value.push(...items)
+    nextMailCursor.value = data.nextCursor
+    moreMailPages.value = data.hasMore
+  } catch (e) { error.value = e.message } finally { loadingList.value = false }
+}
+async function watchDelivery(id) {
+  const owner = authState.user?.userId
+  for (let i=0; i<120; i++) {
+    await new Promise(resolve => setTimeout(resolve, 1500))
+    if (!deliveryPollingActive || authState.user?.userId !== owner) return
+    let state
+    try { state = await getDeliveryStatus(id) }
+    catch(e) { if (!deliveryPollingActive || authState.user?.userId !== owner) return; throw e }
+    if (!deliveryPollingActive || authState.user?.userId !== owner) return
+    if (state.status === 'DELIVERED') { message.value = '邮件已送达'; return }
+    if (state.status === 'FAILED') { error.value = state.failure || '发送失败'; return }
+  }
+  message.value = '邮件仍在处理中，可稍后在已发送列表查看状态'
+}
 async function handleSend() {
   resetFeedback()
   updateComposeContentFromEditor()
@@ -1820,17 +1848,18 @@ async function handleSend() {
 
   sending.value = true
   try {
-    const result = await sendMail({
-      to,
-      cc,
-      bcc,
-      subject: composeForm.subject.trim(),
-      content: composeForm.content.trim()
-    })
-
-    for (const file of selectedFiles.value) {
-      await uploadAttachment(result.mailId, file)
+    const content = { to, cc, bcc, subject: composeForm.subject.trim(), content: composeForm.content.trim() }
+    const signature = JSON.stringify(content) + selectedFiles.value.map(f => `${f.name}:${f.size}:${f.lastModified}`).join('|')
+    if (!pendingSubmission || pendingSubmission.signature !== signature) {
+      pendingSubmission = { signature, key: crypto.randomUUID(), attachments: [] }
     }
+    for (const file of selectedFiles.value.slice(pendingSubmission.attachments.length)) {
+      const staged = await uploadAttachment(null, file)
+      pendingSubmission.attachments.push(staged.attachmentId)
+    }
+    const result = await sendMail({ ...content, attachmentIds: pendingSubmission.attachments }, pendingSubmission.key)
+    pendingSubmission = null
+    if (result.status !== 'DELIVERED') watchDelivery(result.mailId).catch(e => { error.value = e.message })
 
     if (activeDraftId.value) {
       removeDraftById(activeDraftId.value)
@@ -1838,7 +1867,7 @@ async function handleSend() {
 
     composeOpen.value = false
     resetCompose()
-    message.value = '邮件发送成功'
+    message.value = result.status === 'DELIVERED' ? '邮件已送达' : '邮件已提交，正在处理'
     await loadFolder('sent')
     await refreshFolderCounts()
   } catch (err) {
@@ -1995,6 +2024,7 @@ function startInsightsPanelDrag(event) {
 }
 
 function resetAccountScopedState() {
+  pendingSubmission = null
   activeFolderKey.value = 'inbox'
   selectedMailId.value = null
   selectedMail.value = null
@@ -2103,6 +2133,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  deliveryPollingActive = false
   stopModalDrag()
   stopInsightsPanelDrag()
   stopPaneResize()
@@ -2328,6 +2359,7 @@ watch(showUserPanel, (open) => {
                   <span class="mail-subject">{{ mail.subject }}</span>
                 </span>
                 <span class="mail-row-meta">
+                  <span v-if="activeFolderKey === 'sent' && mail.raw?.deliveryStatus" class="mail-tag">{{ ({PENDING: '已提交', PROCESSING: '处理中', DELIVERED: '已送达', FAILED: '失败'})[mail.raw.deliveryStatus] }}</span>
                   <span v-if="mail.hasAttachment" class="mail-tag">📎</span>
                   <span v-if="shouldShowMailStar(mail)" class="read-status-tag starred-tag"> ★ </span>
                   <span v-if="activeFolderKey === 'inbox'" class="read-status-tag" :class="mail.isRead ? 'read-tag' : 'unread-tag'">{{ mail.isRead ? '已读' : '未读' }}</span>
@@ -2338,6 +2370,7 @@ watch(showUserPanel, (open) => {
               </span>
             </button>
           </template>
+          <button v-if="moreMailPages" type="button" class="ghost-button" :disabled="loadingList" @click="loadMoreMails">加载更多</button>
         </section>
 
         <div

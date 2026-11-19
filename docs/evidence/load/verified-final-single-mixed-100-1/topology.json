@@ -1,0 +1,16 @@
+{
+  "backend": {
+    "running": true,
+    "cpu_nanocores": 2000000000,
+    "memory_bytes": 1610612736,
+    "db_pool": 20,
+    "consumers": 4,
+    "rate_capacity": 1000000,
+    "jar_sha256": "77d1cb00891defe8a58dc7adffad7539488432f29e32f3f51751084603fcac4a"
+  },
+  "backend-b": {
+    "running": false,
+    "cpu_nanocores": 1000000000,
+    "memory_bytes": 805306368
+  }
+}

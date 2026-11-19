@@ -1,0 +1,47 @@
+{
+  "POST auth/login": {
+    "count": 2,
+    "statuses": {
+      "200": 2
+    },
+    "p50_ms": 4.687622,
+    "p95_ms": 4.9114781,
+    "p99_ms": 4.93137642
+  },
+  "POST attachment/upload": {
+    "count": 1,
+    "statuses": {
+      "200": 1
+    },
+    "p50_ms": 36.8436,
+    "p95_ms": 36.8436,
+    "p99_ms": 36.8436
+  },
+  "POST mail/send": {
+    "count": 1,
+    "statuses": {
+      "202": 1
+    },
+    "p50_ms": 113.730789,
+    "p95_ms": 113.730789,
+    "p99_ms": 113.730789
+  },
+  "GET mail/:id/status": {
+    "count": 1,
+    "statuses": {
+      "200": 1
+    },
+    "p50_ms": 3.206269,
+    "p95_ms": 3.206269,
+    "p99_ms": 3.206269
+  },
+  "GET attachment/download/:id": {
+    "count": 12001,
+    "statuses": {
+      "200": 12001
+    },
+    "p50_ms": 4.115074,
+    "p95_ms": 6.570685,
+    "p99_ms": 13.479231
+  }
+}

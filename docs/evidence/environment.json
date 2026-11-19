@@ -1,0 +1,13 @@
+{
+  "host_os": "Windows-11-10.0.26200-SP0",
+  "python": "3.13.9",
+  "database": "8.0.46",
+  "docker_version": "29.8.2",
+  "docker_resources": "CPU=6 Memory=7996551168",
+  "container_limits": "/email-hc-backend-1 Running=true CPU=2000000000 Memory=1610612736\n/email-hc-backend-b-1 Running=false CPU=1000000000 Memory=805306368\n/email-hc-db-1 Running=true CPU=2000000000 Memory=1073741824",
+  "nginx_version": "nginx version: nginx/1.28.3",
+  "redis_version": "Redis server v=7.4.11 sha=00000000:0 malloc=jemalloc-5.3.0 bits=64 build=40ff01a501d8e4b6",
+  "rabbitmq_version": "3.13.7",
+  "java_version": "openjdk version \"21.0.13\" 2026-10-20 LTS\nOpenJDK Runtime Environment Temurin-21.0.13+9 (build 21.0.13+9-LTS)\nOpenJDK 64-Bit Server VM Temurin-21.0.13+9 (build 21.0.13+9-LTS, mixed mode, sharing)",
+  "k6_version": "k6 v0.54.0 (commit/baba871c8a, go1.23.1, linux/amd64)"
+}

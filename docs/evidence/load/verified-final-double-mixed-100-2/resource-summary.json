@@ -1,0 +1,32 @@
+{
+  "email-hc-backend-1": {
+    "samples": 44,
+    "cpu_mean_percent_one_core": 21.711818181818185,
+    "cpu_max_percent_one_core": 32.2,
+    "memory_max_mib": 303.2
+  },
+  "email-hc-backend-b-1": {
+    "samples": 44,
+    "cpu_mean_percent_one_core": 22.73181818181818,
+    "cpu_max_percent_one_core": 61.62,
+    "memory_max_mib": 311.7
+  },
+  "email-hc-db-1": {
+    "samples": 44,
+    "cpu_mean_percent_one_core": 81.73136363636364,
+    "cpu_max_percent_one_core": 120.4,
+    "memory_max_mib": 684.9
+  },
+  "email-hc-rabbitmq-1": {
+    "samples": 44,
+    "cpu_mean_percent_one_core": 38.03840909090909,
+    "cpu_max_percent_one_core": 174.91,
+    "memory_max_mib": 204.8
+  },
+  "email-hc-redis-1": {
+    "samples": 44,
+    "cpu_mean_percent_one_core": 1.0159090909090909,
+    "cpu_max_percent_one_core": 4.41,
+    "memory_max_mib": 4.5
+  }
+}

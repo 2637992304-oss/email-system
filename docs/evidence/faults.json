@@ -1,0 +1,32 @@
+{
+  "broker_outage_and_backend_restart": {
+    "mail": 2000100047,
+    "status": "DELIVERED",
+    "client_observed_recovery_seconds": 16.887
+  },
+  "redis_outage": {
+    "new_submission": 503,
+    "read": 200
+  },
+  "publish_confirmed": {
+    "mail": 2000100048,
+    "status": "DELIVERED",
+    "receiver_rows": 1
+  },
+  "consumer_committed": {
+    "mail": 2000100049,
+    "status": "DELIVERED",
+    "receiver_rows": 1
+  },
+  "processing_claimed": {
+    "mail": 2000100050,
+    "status": "DELIVERED",
+    "receiver_rows": 1
+  },
+  "dead_letter_replay": {
+    "mail": 2000100051,
+    "attempts_before_replay": 4,
+    "status": "DELIVERED"
+  },
+  "single_backend_exit": "readable"
+}

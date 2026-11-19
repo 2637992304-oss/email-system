@@ -1,0 +1,11 @@
+{
+  "endpoint": "/api/mail/sent?size=20",
+  "returned": 20,
+  "list_related_selects": 3,
+  "sql": [
+    "SELECT             user_id,             email,             username,             password,             register_time,             status         FROM `user`         WHERE user_id = 1000000000",
+    "SELECT EXISTS(SELECT 1 FROM mail_star ms WHERE ms.user_id=1000000000 AND ms.mail_id=m.mail_id) is_starred,m.delivery_status,m.mail_id,m.sender_id,u.username sender_name,u.email sender_email,m.subject,         LEFT(m.content,50) preview,m.has_attachment,m.send_time,m.priority,m.is_spam,          NULL is_read,NULL receive_time        FROM mail m JOIN user u ON u.user_id=m.sender_id               WHERE m.mail_status=1        AND m.sender_id=1000000000 AND m.sender_deleted=FALSE                            ORDER BY m.send_time DESC,m.mail_id DESC         LIMIT 21",
+    "SELECT mr.mail_id,u.username,u.email FROM mail_receiver mr JOIN user u ON u.user_id=mr.receiver_id       WHERE mr.receiver_type IN ('TO','CC') AND mr.mail_id IN        (  2000083944 , 2000083943 , 2000083942 , 2000083941 , 2000083940 , 2000083939 , 2000083938 , 2000083937 , 2000083936 , 2000083935 , 2000083934 , 2000083933 , 2000083932 , 2000083931 , 2000083930 , 2000083929 , 2000083928 , 2000083927 , 2000083926 , 2000083925 )        ORDER BY mr.mail_id,FIELD(mr.receiver_type,'TO','CC'),u.email"
+  ],
+  "baseline_formula": "2+2N SELECTs from original service (includes user lookup); source snapshot retained"
+}

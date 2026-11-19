@@ -191,6 +191,7 @@ public class SpamDeepLearningEngine {
 
     /** 手动添加垃圾词到词典（不受DL概率控制，用于管理操作） */
     public synchronized void addLearnedWords(java.util.List<String> words, int label) {
+        if(enqueueLearning("add",words,label,1))return;
         if (label != 1) return; // 仅支持添加垃圾词
         for (String word : words) {
             word = word.trim();
@@ -204,7 +205,7 @@ public class SpamDeepLearningEngine {
     }
 
     /** 获取单个词的DL垃圾倾向概率（基于W1第一层权重，sigmoid归一化） */
-    public double getWordSpamProbability(String word) {
+    public synchronized double getWordSpamProbability(String word) {
         if (!initialized) return 0.0;
         word = word.trim().toLowerCase();
         if (word.length() < 2) return 0.0;
@@ -219,6 +220,7 @@ public class SpamDeepLearningEngine {
      * label=0: 词概率<0.5 → 从 learnedSpamWords 移除; 概率<0.3 → 加入 learnedHamWords
      */
     public synchronized void updateDictionaryFromWords(java.util.List<String> words, int label) {
+        if(enqueueLearning("dictionary",words,label,1))return;
         boolean changed = false;
         for (String word : words) {
             word = word.trim();
@@ -369,7 +371,7 @@ public class SpamDeepLearningEngine {
      * 全量分词预测：FMM分词取邮件中所有可识别词，参与DL平均计算。
      * 词在dlTrackedWords中→用训练概率；不在→自动加入词库给默认0.5。
      */
-    public double predict(String subject, String body) {
+    public synchronized double predict(String subject, String body) {
         if (!initialized) return 0.0;
         String text = (subject != null ? subject : "") + " " + (body != null ? body : "");
         text = text.trim();
@@ -466,6 +468,7 @@ public class SpamDeepLearningEngine {
      * @param repeat 重复训练次数，用户举报建议 5 次以加速学习
      */
     public synchronized void train(String subject, String body, int label, int repeat) {
+        if(enqueueLearning("text",java.util.List.of(subject==null?"":subject,body==null?"":body),label,repeat))return;
         for (int r = 0; r < repeat; r++) {
             trainOnce(subject, body, label);
         }
@@ -479,6 +482,7 @@ public class SpamDeepLearningEngine {
      * @param repeat 每词重复次数
      */
     public synchronized void trainWithWords(java.util.List<String> words, int label, int repeat) {
+        if(enqueueLearning("words",words,label,repeat))return;
         if (words == null || words.isEmpty()) return;
         int trained = 0;
         for (String word : words) {
@@ -598,11 +602,17 @@ public class SpamDeepLearningEngine {
 
     // ==================== 模型持久化 ====================
 
-    private void loadModel() {
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.beans.factory.ObjectProvider<com.shixun.concurrency.ModelLearning> learning;
+    private boolean enqueueLearning(String kind,Object value,int label,int repeat) {
+        if(com.shixun.concurrency.ModelLearning.WORKER.get() || learning==null)return false;
+        var queue=learning.getIfAvailable();if(queue==null)return false;
+        queue.submit(kind,value,label,repeat);return true;
+    }
+    public synchronized void reloadSharedModel(){loadModel();}
+
+    public synchronized void restoreSnapshot(String json) {
         try {
-            String json = jdbcTemplate.queryForObject(
-                    "SELECT model_json FROM spam_model WHERE id = 1", String.class);
-            if (json != null && !json.isEmpty()) {
                 Map<String, Object> model = objectMapper.readValue(json,
                         new TypeReference<Map<String, Object>>() {});
                 W1 = parseMatrix(model, "W1");
@@ -616,6 +626,15 @@ public class SpamDeepLearningEngine {
                 restoreLearnedWords(model, "learnedSpamWords", learnedSpamWords);
                 restoreLearnedWords(model, "dlTrackedWords", dlTrackedWords);
                 initialized = true;
+        } catch(Exception e) { throw new IllegalArgumentException("Invalid model snapshot",e); }
+    }
+
+    private void loadModel() {
+        try {
+            String json = jdbcTemplate.queryForObject(
+                    "SELECT model_json FROM spam_model WHERE id = 1", String.class);
+            if (json != null && !json.isEmpty()) {
+                restoreSnapshot(json);
                 log.info("[DL-Spam] 模型已加载: 训练步数={}, 准确率EMA={}%",
                         trainingCount, String.format("%.2f", emaAccuracy * 100));
             }
@@ -653,7 +672,8 @@ public class SpamDeepLearningEngine {
                     json, INPUT_DIM, HIDDEN1_DIM, trainingCount, emaAccuracy, LocalDateTime.now());
             log.debug("[DL-Spam] 模型已持久化: 步数={}", trainingCount);
         } catch (Exception e) {
-            log.warn("[DL-Spam] 模型持久化失败: {}", e.getMessage());
+            log.warn("[DL-Spam] 模型持久化失败: {}", e.getClass().getSimpleName());
+            if(com.shixun.concurrency.ModelLearning.WORKER.get()) throw new IllegalStateException("Model persistence failed",e);
         }
     }
 
@@ -782,12 +802,12 @@ public class SpamDeepLearningEngine {
     }
 
     /** 检查文本是否命中用户举报学到的垃圾词 */
-    public boolean matchesLearnedSpamWords(String subject, String body) {
+    public synchronized boolean matchesLearnedSpamWords(String subject, String body) {
         return !getMatchedLearnedWords(subject, body).isEmpty();
     }
 
     /** 获取文本中命中的用户举报学到的垃圾词 */
-    public java.util.List<String> getMatchedLearnedWords(String subject, String body) {
+    public synchronized java.util.List<String> getMatchedLearnedWords(String subject, String body) {
         String text = (subject != null ? subject : "") + " " + (body != null ? body : "");
         java.util.Set<String> matched = new java.util.LinkedHashSet<>();
         for (String word : segmentWords(text)) {

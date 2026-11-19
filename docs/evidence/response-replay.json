@@ -1,0 +1,9 @@
+{
+  "original_response": "dropped_after_upstream_202",
+  "idempotency_key": "a51c9b07be6447e6afa95d145588056b",
+  "mail": 2000100046,
+  "retry_mail_ids_equal": true,
+  "backend_count": 2,
+  "receiver_rows": 1,
+  "status": "DELIVERED"
+}

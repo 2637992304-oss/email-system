@@ -55,6 +55,14 @@ class AttachmentServiceTest {
     }
 
     @Test
+    void stagingModeRejectsPostSendAttachmentUpload() {
+        org.springframework.test.util.ReflectionTestUtils.setField(attachmentService,"stagingOnly",true);
+        BusinessException ex=assertThrows(BusinessException.class,()->attachmentService.upload(12L,new MockMultipartFile("file","x.txt","text/plain",new byte[]{1})));
+        assertEquals(400,ex.getCode());
+        verifyNoInteractions(attachmentMapper,fileStorageUtil);
+    }
+
+    @Test
     void rejectsDownloadWhenUserHasNoMailRelationship() {
         Attachment attachment = attachment(8L, 12L);
         when(attachmentMapper.selectById(8L)).thenReturn(attachment);

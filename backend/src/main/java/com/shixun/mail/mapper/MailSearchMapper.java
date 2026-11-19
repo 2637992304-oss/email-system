@@ -10,11 +10,11 @@ import java.util.List;
 @Mapper
 public interface MailSearchMapper {
 
-    List<Mail> search(@Param("userId") Long userId, @Param("keyword") String keyword);
+    List<Mail> search(@Param("userId") Long userId, @Param("keyword") String keyword, @Param("time") LocalDateTime time, @Param("id") Long id, @Param("limit") int limit);
 
     List<Mail> filter(@Param("userId") Long userId,
                       @Param("isRead") Boolean isRead,
                       @Param("hasAttachment") Boolean hasAttachment,
                       @Param("startTime") LocalDateTime startTime,
-                      @Param("endTime") LocalDateTime endTime);
+                      @Param("endTime") LocalDateTime endTime, @Param("folder") String folder, @Param("time") LocalDateTime time, @Param("id") Long id, @Param("limit") int limit);
 }

@@ -1,0 +1,11 @@
+{
+  "sse_connection": "A",
+  "submission_and_consumer": "B",
+  "notified_mail": 2000087488,
+  "attachment_uploaded_at": "A",
+  "attachment_downloaded_at": "B",
+  "sha256": "200c174ef4c5376ace48b29287299b72d20bf97200556222e79785079a37ce25",
+  "bound_attachment_reuse_status": 400,
+  "post_send_upload_status": 400,
+  "old_connection_closed_new_connection_received": true
+}

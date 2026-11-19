@@ -171,7 +171,7 @@ public class PriorityService {
 
         // ---- 预加载批量数据，避免循环内逐条查库 ----
         SenderBehaviorCache behaviorCache = buildBehaviorCache(userId);
-        Set<Long> spamMailIds = loadSpamMailIds();
+        Set<Long> spamMailIds = mails.stream().filter(m -> Boolean.TRUE.equals(m.getSpamFlag())).map(MailListVO::getMailId).collect(Collectors.toSet());
         Set<Long> starredMailIds = loadStarredMailIds(userId);
         Set<String> whitelistEmails = loadContactEmails(userId, "WHITELIST");
         Set<String> blacklistEmails = loadContactEmails(userId, "BLACKLIST");

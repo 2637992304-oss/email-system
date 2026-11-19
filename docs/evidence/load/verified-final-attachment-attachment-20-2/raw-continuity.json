@@ -1,0 +1,6 @@
+{
+  "load_http_points": 12001,
+  "load_span_seconds": 599.9612760543823,
+  "largest_load_timestamp_gap_seconds": 0.07375383377075195,
+  "requires_continuity_review": false
+}

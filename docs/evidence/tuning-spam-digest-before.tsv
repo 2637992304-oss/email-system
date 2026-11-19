@@ -1,0 +1,6 @@
+DIGEST_TEXT	COUNT_STAR	total_seconds	SUM_ROWS_EXAMINED
+SELECT COUNT ( * ) FROM `spam_record` `sr` JOIN `mail` `m` ON `sr` . `mail_id` = `m` . `mail_id` WHERE `m` . `sender_id` = ? AND `sr` . `created_at` >= ?	1828	1078.27	195313142
+SELECT `m` . `mail_id` , `m` . `sender_id` , `u` . `username` AS `sender_name` , `u` . `email` AS `sender_email` , `m` . `subject` , `m` . `content` , `m` . `send_time` , `m` . `has_attachment` , `m` . `priority` , `m` . `is_spam` , `sr` . `spam_type` , `sr` . `reason` FROM `mail` `m` JOIN `user` `u` ON `m` . `sender_id` = `u` . `user_id` LEFT JOIN `spam_record` `sr` ON `sr` . `mail_id` = `m` . `mail_id` WHERE `m` . `mail_id` = ? AND `m` . `mail_status` = ?	4801	8.65	4802
+INSERT INTO `spam_record` ( `mail_id` , `spam_type` , `reason` , `created_at` ) VALUES (...)	580	0.5	0
+INSERT INTO `spam_record` ( `mail_id` , `spam_type` , `keywords` , `reason` , `created_at` ) VALUES (...)	1	0	0
+DELETE FROM `spam_record` WHERE ( `mail_id` = ? )	1	0	0

@@ -1,24 +1,26 @@
 import { request } from './http'
 
-export function getInboxMails() {
-  return request('/api/mail/inbox')
+function unwrapPage(page) { return Array.isArray(page) ? page : Object.assign(page.items || [], { nextCursor: page.nextCursor, hasMore: page.hasMore }) }
+async function folderPage(folder, cursor) {
+  const page = await request(`/api/mail/${folder}?size=20${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`)
+  if (Array.isArray(page)) return page
+  return Object.assign(page.items || [], { nextCursor: page.nextCursor, hasMore: page.hasMore })
 }
+export function getInboxMails(cursor) { return folderPage('inbox', cursor) }
 
-export function getSentMails() {
-  return request('/api/mail/sent')
-}
 
-export function getTrashMails() {
-  return request('/api/mail/trash')
-}
+export function getSentMails(cursor) { return folderPage('sent', cursor) }
+
+export function getTrashMails(cursor) { return folderPage('trash', cursor) }
 
 export function getMailDetail(mailId) {
   return request(`/api/mail/detail/${mailId}`)
 }
 
-export function sendMail(payload) {
+export function sendMail(payload, key) {
   return request('/api/mail/send', {
     method: 'POST',
+    headers: { 'Idempotency-Key': key },
     body: payload
   })
 }
@@ -41,12 +43,13 @@ export function markMailUnread(mailId) {
   })
 }
 
-export function searchMails(userId, keyword) {
+export function searchMails(userId, keyword, cursor) {
   const params = new URLSearchParams({
     userId: String(userId),
-    keyword: keyword || ''
+    keyword: keyword || '',
+    ...(cursor ? { cursor } : {})
   })
-  return request(`/api/mail/search?${params.toString()}`)
+  return request(`/api/mail/search?${params.toString()}`).then(unwrapPage)
 }
 
 export function filterMails(userId, filters = {}) {
@@ -56,7 +59,7 @@ export function filterMails(userId, filters = {}) {
       params.set(key, String(value))
     }
   })
-  return request(`/api/mail/filter?${params.toString()}`)
+  return request(`/api/mail/filter?${params.toString()}`).then(unwrapPage)
 }
 
 export function restoreMail(mailId) {
@@ -73,7 +76,7 @@ export function permanentlyDeleteMail(mailId) {
 
 export function uploadAttachment(mailId, file) {
   const formData = new FormData()
-  formData.set('mailId', mailId)
+  if (mailId != null) formData.set('mailId', mailId)
   formData.set('file', file)
 
   return request('/api/attachment/upload', {
@@ -93,11 +96,11 @@ export function getPriorityList(userId) {
   return request(`/api/mail/priority?${params.toString()}`)
 }
 
-export function organizeMails(userId, folderKey = 'inbox') {
+export function organizeMails(userId, folderKey = 'inbox', cursor) {
   return request('/api/mail/organize', {
     method: 'POST',
-    body: { userId: String(userId), folderKey }
-  })
+    body: { userId: String(userId), folderKey, cursor }
+  }).then(unwrapPage)
 }
 
 export function translateMailToChinese(payload) {
@@ -167,9 +170,7 @@ export function removeStar(mailId) {
   return request(`/api/mail/star/${mailId}`, { method: 'DELETE' })
 }
 
-export function getStarredMails() {
-  return request('/api/mail/starred')
-}
+export function getStarredMails(cursor) { return folderPage('starred', cursor) }
 
 export function checkStar(mailId) {
   return request(`/api/mail/star/${mailId}/check`)
@@ -193,3 +194,9 @@ export function getContactList() {
 export function getDlAnalysis(mailId) {
   return request('/api/mail/' + mailId + '/dl-analysis')
 }
+
+export function getDeliveryStatus(id) { return request(`/api/mail/${id}/status`) }
+
+export function getSpamMails(cursor) { return folderPage('spam', cursor) }
+
+export function getFolderCounts() { return request('/api/mail/counts') }

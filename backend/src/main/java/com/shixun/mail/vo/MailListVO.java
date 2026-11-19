@@ -9,6 +9,8 @@ import java.util.List;
 @Data
 public class MailListVO {
     private Long mailId;
+    private String deliveryStatus;
+    private Boolean starred;
     private Long senderId;
     private String senderName;
     private String senderEmail;

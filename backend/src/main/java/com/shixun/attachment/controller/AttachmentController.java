@@ -31,7 +31,7 @@ public class AttachmentController {
     }
 
     @PostMapping("/upload")
-    public ApiResponse<AttachmentVO> upload(@RequestParam Long mailId,
+    public ApiResponse<AttachmentVO> upload(@RequestParam(required=false) Long mailId,
                                             @RequestParam("file") MultipartFile file) {
         return ApiResponse.success("上传成功", attachmentService.upload(mailId, file));
     }

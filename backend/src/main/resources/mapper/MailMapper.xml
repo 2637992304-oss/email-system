@@ -6,6 +6,8 @@
 
     <resultMap id="MailListResultMap" type="com.shixun.mail.vo.MailListVO">
         <id column="mail_id" property="mailId"/>
+        <result column="delivery_status" property="deliveryStatus"/>
+        <result column="is_starred" property="starred"/>
         <result column="sender_id" property="senderId"/>
         <result column="sender_name" property="senderName"/>
         <result column="sender_email" property="senderEmail"/>
@@ -16,6 +18,7 @@
         <result column="receive_time" property="receiveTime"/>
         <result column="send_time" property="sendTime"/>
         <result column="priority" property="priority"/>
+        <result column="priority_score" property="priorityScore"/>
         <result column="is_spam" property="spamFlag"/>
     </resultMap>
 
@@ -65,20 +68,10 @@
 
     <insert id="insertMailReceiver" parameterType="com.shixun.mail.entity.MailReceiver">
         INSERT INTO mail_receiver (
-            mail_id,
-            receiver_id,
-            receiver_type,
-            is_read,
-            is_deleted,
-            receive_time
-        ) VALUES (
-            #{mailId},
-            #{receiverId},
-            #{receiverType},
-            #{read},
-            #{deleted},
-            NOW()
+            mail_id, receiver_id, receiver_type, is_read, is_deleted, receive_time, mail_send_time
         )
+        SELECT mail_id, #{receiverId}, #{receiverType}, #{read}, #{deleted}, NOW(), send_time
+        FROM mail WHERE mail_id = #{mailId}
     </insert>
 
     <select id="selectInboxList" resultMap="MailListResultMap">
@@ -346,4 +339,49 @@
         SET is_spam = #{isSpam}
         WHERE mail_id = #{mailId}
     </update>
+    <select id="selectPage" resultMap="MailListResultMap">
+      SELECT EXISTS(SELECT 1 FROM mail_star ms WHERE ms.user_id=#{userId} AND ms.mail_id=m.mail_id) is_starred,m.delivery_status,m.mail_id,m.sender_id,u.username sender_name,u.email sender_email,m.subject,
+        LEFT(m.content,50) preview,m.has_attachment,m.send_time,m.priority,m.is_spam,
+        <choose><when test="folder == 'sent'">NULL is_read,NULL receive_time</when>
+        <otherwise>mr.is_read,mr.receive_time</otherwise></choose>
+      FROM mail m JOIN user u ON u.user_id=m.sender_id
+      <if test="folder != 'sent'">LEFT JOIN mail_receiver mr ON mr.mail_id=m.mail_id AND mr.receiver_id=#{userId}</if>
+      WHERE m.mail_status=1
+      <choose>
+        <when test="folder == 'sent'">AND m.sender_id=#{userId} AND m.sender_deleted=FALSE</when>
+        <when test="folder == 'trash'">AND ((m.sender_id=#{userId} AND m.sender_deleted=TRUE) OR mr.is_deleted=TRUE)</when>
+        <when test="folder == 'starred'">AND EXISTS(SELECT 1 FROM mail_star s WHERE s.mail_id=m.mail_id AND s.user_id=#{userId}) AND ((m.sender_id=#{userId} AND m.sender_deleted=FALSE) OR mr.is_deleted=FALSE)</when>
+        <otherwise>AND mr.receiver_id=#{userId} AND mr.is_deleted=FALSE
+          <choose><when test="folder == 'spam'">AND m.is_spam=TRUE</when><otherwise>AND m.is_spam=FALSE</otherwise></choose>
+        </otherwise>
+      </choose>
+      <choose>
+      <when test="folder == 'inbox' or folder == 'spam'">
+        <if test="time != null">AND (mr.receive_time &lt; #{time} OR (mr.receive_time=#{time} AND mr.mail_id &lt; #{id}))</if>
+        ORDER BY mr.receive_time DESC,mr.mail_id DESC
+      </when>
+      <otherwise>
+        <if test="time != null">AND (m.send_time &lt; #{time} OR (m.send_time=#{time} AND m.mail_id &lt; #{id}))</if>
+        ORDER BY m.send_time DESC,m.mail_id DESC
+      </otherwise>
+      </choose> LIMIT #{limit}
+    </select>
+    <select id="selectPageRecipients" resultType="map">
+      SELECT mr.mail_id,u.username,u.email FROM mail_receiver mr JOIN user u ON u.user_id=mr.receiver_id
+      WHERE mr.receiver_type IN ('TO','CC') AND mr.mail_id IN
+      <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+      ORDER BY mr.mail_id,FIELD(mr.receiver_type,'TO','CC'),u.email
+    </select>
+ <select id="selectPriorityPage" resultMap="MailListResultMap">
+ SELECT mr.is_read,mr.receive_time,EXISTS(SELECT 1 FROM mail_star ms WHERE ms.user_id=#{userId} AND ms.mail_id=m.mail_id) is_starred,m.mail_id,m.sender_id,m.subject,LEFT(m.content,50) preview,m.send_time,m.has_attachment,m.priority,m.is_spam,
+ u.username sender_name,u.email sender_email,p.score priority_score
+ FROM mail_priority_score p JOIN mail m ON m.mail_id=p.mail_id JOIN user u ON u.user_id=m.sender_id
+ LEFT JOIN mail_receiver mr ON mr.mail_id=m.mail_id AND mr.receiver_id=#{userId}
+ WHERE p.user_id=#{userId} AND m.mail_status=1
+ <choose><when test="folder == 'sent'">AND m.sender_id=#{userId} AND m.sender_deleted=FALSE</when>
+ <when test="folder == 'trash'">AND ((m.sender_id=#{userId} AND m.sender_deleted=TRUE) OR EXISTS(SELECT 1 FROM mail_receiver mr WHERE mr.mail_id=m.mail_id AND mr.receiver_id=#{userId} AND mr.is_deleted=TRUE))</when>
+ <otherwise>AND m.is_spam=FALSE AND EXISTS(SELECT 1 FROM mail_receiver mr WHERE mr.mail_id=m.mail_id AND mr.receiver_id=#{userId} AND mr.is_deleted=FALSE)</otherwise></choose>
+ <if test="score != null">AND (p.score &lt; #{score} OR (p.score=#{score} AND p.mail_id &lt; #{id}))</if>
+ ORDER BY p.score DESC,p.mail_id DESC LIMIT #{limit}
+ </select>
 </mapper>

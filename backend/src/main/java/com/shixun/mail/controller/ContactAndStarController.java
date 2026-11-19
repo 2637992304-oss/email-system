@@ -70,15 +70,11 @@ public class ContactAndStarController {
     /**
      * 获取星标邮件列表。
      */
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.shixun.mail.service.MailService mailService;
     @GetMapping("/starred")
-    public ApiResponse<List<MailListVO>> getStarredMails() {
-        Long userId = AuthUserContext.getUserId();
-        List<MailListVO> starred = mailStarMapper.selectVisibleStarredList(userId);
-        for (MailListVO item : starred) {
-            item.setReceiverNames(mailMapper.selectReceiverNamesByMailId(item.getMailId()));
-            item.setReceiverEmails(mailMapper.selectReceiverEmailsByMailId(item.getMailId()));
-        }
-        return ApiResponse.success(starred);
+    public ApiResponse<?> getStarredMails(@RequestParam(required=false) String cursor,@RequestParam(defaultValue="20") int size) {
+        return ApiResponse.success(mailService.page("starred",cursor,size));
     }
 
     /**

@@ -1,0 +1,13 @@
+services:
+  backend:
+    environment:
+      DB_POOL_SIZE: "20"
+      CONSUMERS: "4"
+    cpus: 2.0
+    mem_limit: 1536m
+  backend-b:
+    profiles: [disabled]
+  frontend:
+    depends_on: !override [backend]
+    volumes:
+      - ./frontend/nginx.single.conf:/etc/nginx/conf.d/default.conf:ro

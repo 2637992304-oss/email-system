@@ -13,6 +13,12 @@ import java.util.List;
 @Mapper
 public interface MailMapper extends BaseMapper<Mail> {
 
+    List<MailListVO> selectPage(@Param("userId") Long userId, @Param("folder") String folder,
+        @Param("time") java.time.LocalDateTime time, @Param("id") Long id, @Param("limit") int limit);
+    List<java.util.Map<String,Object>> selectPageRecipients(@Param("ids") List<Long> ids);
+
+    List<MailListVO> selectPriorityPage(@Param("userId") Long userId,@Param("folder") String folder,@Param("score") Integer score,@Param("id") Long id,@Param("limit") int limit);
+
     int insertMail(Mail mail);
 
     int insertMailReceiver(MailReceiver receiver);
