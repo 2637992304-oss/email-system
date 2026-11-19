@@ -36,8 +36,15 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Check sensitive files
         run: python3 scripts/check-secrets.py
-      - name: Initialize schema
-        run: docker exec -i ${{ job.services.mysql.id }} mysql -uroot mail_system < database/schema.sql
+      - name: Initialize schema and apply migrations
+        env:
+          MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          docker exec -i "$MYSQL_CONTAINER" mysql -uroot mail_system < database/schema.sql
+          for migration in database/migrations/V*.sql; do
+            echo "Applying $migration"
+            docker exec -i "$MYSQL_CONTAINER" mysql -uroot mail_system < "$migration"
+          done
       - name: Backend tests and executable package
         working-directory: backend
         run: ./mvnw -B verify
@@ -50,4 +57,7 @@ jobs:
           cd backend
           java -jar target/mail-system-0.0.1-SNAPSHOT.jar > /tmp/email-backend.log 2>&1 &
           cd ..
-          python3 scripts/smoke-test.py
+          if ! python3 scripts/smoke-test.py --base-url http://127.0.0.1:8080; then
+            tail -n 120 /tmp/email-backend.log
+            exit 1
+          fi
